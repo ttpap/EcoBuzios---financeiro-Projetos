@@ -117,7 +117,7 @@ export default function BalanceteLinha() {
     },
     onSuccess: ({ willOver }) => {
       toast.success(willOver ? "Lançamento salvo (acima do saldo)" : "Lançamento salvo");
-      setAmount("\");
+      setAmount("");
       setDescription("");
       setExpenseType("");
       setDocumentNumber("");
