@@ -49,6 +49,13 @@
     --sidebar-border: 220 13% 91%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* App theme tokens */
+    --app-bg: 34 38% 96%;
+    --ink: 229 25% 18%;
+    --muted-ink: 226 12% 42%;
+    --brand: 238 74% 58%;
+    --brand-strong: 243 72% 52%;
   }
 
   .dark {
@@ -87,6 +94,12 @@
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --app-bg: 230 28% 10%;
+    --ink: 0 0% 98%;
+    --muted-ink: 227 14% 72%;
+    --brand: 238 74% 70%;
+    --brand-strong: 243 72% 64%;
   }
 }
 

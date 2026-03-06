@@ -11,6 +11,7 @@ import {
   Receipt,
   Settings,
   Table2,
+  FileText,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,6 +21,7 @@ const nav = [
   { to: "/import", label: "Importar planilha", icon: FileUp },
   { to: "/balancete", label: "Balancete", icon: Table2 },
   { to: "/lancamentos", label: "Lançamentos", icon: Receipt },
+  { to: "/relatorios", label: "Relatórios", icon: FileText },
   { to: "/settings", label: "Configurações", icon: Settings },
 ];
 
