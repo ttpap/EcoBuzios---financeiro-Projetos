@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "@/pages/Login";
@@ -14,6 +14,10 @@ import BalanceteLinha from "@/pages/BalanceteLinha";
 import Lancamentos from "@/pages/Lancamentos";
 import Relatorios from "@/pages/Relatorios";
 import Settings from "@/pages/Settings";
+import BalanceteLancamentos from "@/pages/BalanceteLancamentos";
+import BalanceteRelatorios from "@/pages/BalanceteRelatorios";
+import BalanceteAlertas from "@/pages/BalanceteAlertas";
+import BalanceteConfiguracoes from "@/pages/BalanceteConfiguracoes";
 import { SessionProvider } from "@/context/SessionContext";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { AppShell } from "@/components/app/AppShell";
@@ -39,9 +43,18 @@ const App = () => (
 
             <Route path="/dashboard" element={<AuthedLayout><Dashboard /></AuthedLayout>} />
             <Route path="/projects" element={<AuthedLayout><Projects /></AuthedLayout>} />
-            <Route path="/import" element={<AuthedLayout><ImportBudget /></AuthedLayout>} />
+
+            {/* Módulo Balancete */}
             <Route path="/balancete" element={<AuthedLayout><Balancete /></AuthedLayout>} />
+            <Route path="/balancete/importar" element={<AuthedLayout><ImportBudget /></AuthedLayout>} />
+            <Route path="/balancete/lancamentos" element={<AuthedLayout><BalanceteLancamentos /></AuthedLayout>} />
+            <Route path="/balancete/relatorios" element={<AuthedLayout><BalanceteRelatorios /></AuthedLayout>} />
+            <Route path="/balancete/alertas" element={<AuthedLayout><BalanceteAlertas /></AuthedLayout>} />
+            <Route path="/balancete/configuracoes" element={<AuthedLayout><BalanceteConfiguracoes /></AuthedLayout>} />
             <Route path="/balancete/linha/:id" element={<AuthedLayout><BalanceteLinha /></AuthedLayout>} />
+
+            {/* Rotas legadas (mantidas) */}
+            <Route path="/import" element={<Navigate to="/balancete/importar" replace />} />
             <Route path="/lancamentos" element={<AuthedLayout><Lancamentos /></AuthedLayout>} />
             <Route path="/relatorios" element={<AuthedLayout><Relatorios /></AuthedLayout>} />
             <Route path="/settings" element={<AuthedLayout><Settings /></AuthedLayout>} />

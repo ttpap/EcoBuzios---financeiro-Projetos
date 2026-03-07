@@ -5,23 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   BarChart3,
-  FileUp,
   FolderKanban,
   LogOut,
-  Receipt,
   Settings,
   Table2,
-  FileText,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { to: "/projects", label: "Projetos", icon: FolderKanban },
-  { to: "/import", label: "Importar planilha", icon: FileUp },
   { to: "/balancete", label: "Balancete", icon: Table2 },
-  { to: "/lancamentos", label: "Lançamentos", icon: Receipt },
-  { to: "/relatorios", label: "Relatórios", icon: FileText },
   { to: "/settings", label: "Configurações", icon: Settings },
 ];
 
@@ -115,7 +109,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <footer className="border-t bg-white/50">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-6 text-xs text-[hsl(var(--muted-ink))] md:px-6">
           <span>Feito para controle de execução financeira por rubrica.</span>
-          <span>v0.1 (MVP)</span>
+          <span>v0.2 (módulo)</span>
         </div>
       </footer>
     </div>

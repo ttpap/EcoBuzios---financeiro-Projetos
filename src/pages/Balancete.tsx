@@ -11,6 +11,7 @@ import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { ArrowRight, Table2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 
 type LineAgg = {
   executedTotal: number;
@@ -22,9 +23,10 @@ function monthKey(date: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-function buildMonthColumns(monthsCount: number) {
-  const start = new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
-  // MVP: months relative to Jan of current year; later: budget start month
+function buildMonthColumns(startMonth: string, monthsCount: number) {
+  const [y, m] = startMonth.split("-").map(Number);
+  const start = new Date(Date.UTC(y, (m ?? 1) - 1, 1));
+
   return Array.from({ length: monthsCount }, (_, i) => {
     const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
     return {
@@ -45,7 +47,11 @@ export default function Balancete() {
     queryFn: async () => {
       // Use selected budget if present; otherwise last budget
       if (activeBudgetId) {
-        const { data, error } = await supabase.from("budgets").select("*").eq("id", activeBudgetId).single();
+        const { data, error } = await supabase
+          .from("budgets")
+          .select("*")
+          .eq("id", activeBudgetId)
+          .single();
         if (error) throw error;
         return data as Budget;
       }
@@ -115,7 +121,13 @@ export default function Balancete() {
   });
 
   const monthsCount = budgetQuery.data?.months_count ?? 12;
-  const monthCols = useMemo(() => buildMonthColumns(monthsCount), [monthsCount]);
+  const startMonth = (budgetQuery.data as any)?.start_month
+    ? String((budgetQuery.data as any).start_month).slice(0, 7)
+    : new Date().toISOString().slice(0, 7);
+  const monthCols = useMemo(
+    () => buildMonthColumns(startMonth, monthsCount),
+    [startMonth, monthsCount]
+  );
 
   const catById = useMemo(() => {
     const m = new Map<string, BudgetCategory>();
@@ -133,8 +145,14 @@ export default function Balancete() {
   }, [linesQuery.data, q, catById]);
 
   const totals = useMemo(() => {
-    const approved = (linesQuery.data ?? []).reduce((acc, l) => acc + (l.is_subtotal ? 0 : Number(l.total_approved ?? 0)), 0);
-    const executed = Array.from((txQuery.data ?? new Map()).values()).reduce((acc, a) => acc + a.executedTotal, 0);
+    const approved = (linesQuery.data ?? []).reduce(
+      (acc, l) => acc + (l.is_subtotal ? 0 : Number(l.total_approved ?? 0)),
+      0
+    );
+    const executed = Array.from((txQuery.data ?? new Map()).values()).reduce(
+      (acc, a) => acc + a.executedTotal,
+      0
+    );
     return { approved, executed, remaining: Math.max(0, approved - executed) };
   }, [linesQuery.data, txQuery.data]);
 
@@ -143,7 +161,10 @@ export default function Balancete() {
       <div className="rounded-3xl border bg-white p-6">
         <div className="text-sm font-semibold text-[hsl(var(--ink))]">Selecione um projeto</div>
         <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">Para ver o balancete, escolha um projeto.</p>
-        <Button asChild className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]">
+        <Button
+          asChild
+          className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+        >
           <Link to="/projects">Ir para Projetos</Link>
         </Button>
       </div>
@@ -152,18 +173,26 @@ export default function Balancete() {
 
   if (!budgetQuery.data) {
     return (
-      <div className="rounded-3xl border bg-white p-6">
-        <div className="text-sm font-semibold text-[hsl(var(--ink))]">Sem orçamento</div>
-        <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">Importe uma planilha para gerar o balancete.</p>
-        <Button asChild className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]">
-          <Link to="/import">Importar orçamento</Link>
-        </Button>
+      <div className="grid gap-6">
+        <BalanceteTabs />
+        <div className="rounded-3xl border bg-white p-6">
+          <div className="text-sm font-semibold text-[hsl(var(--ink))]">Sem orçamento</div>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">Importe uma planilha para gerar o balancete.</p>
+          <Button
+            asChild
+            className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+          >
+            <Link to="/balancete/importar">Importar orçamento</Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="grid gap-6">
+      <BalanceteTabs />
+
       <div className="rounded-3xl border bg-white p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
@@ -171,7 +200,9 @@ export default function Balancete() {
               <Table2 className="h-3.5 w-3.5" />
               Balancete
             </div>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">{budgetQuery.data.name}</h1>
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
+              {budgetQuery.data.name}
+            </h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
               Aprovado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(totals.approved)}</span> ·
               Executado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(totals.executed)}</span> ·
@@ -179,7 +210,12 @@ export default function Balancete() {
             </p>
           </div>
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} className="w-full rounded-full md:w-72" placeholder="Filtrar por rubrica/categoria…" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="w-full rounded-full md:w-72"
+              placeholder="Filtrar por rubrica/categoria…"
+            />
           </div>
         </div>
       </div>
@@ -196,7 +232,9 @@ export default function Balancete() {
                 <TableHead className="text-right">Saldo</TableHead>
                 <TableHead className="text-right">%</TableHead>
                 {monthCols.map((m) => (
-                  <TableHead key={m.key} className="text-right">{m.label}</TableHead>
+                  <TableHead key={m.key} className="text-right">
+                    {m.label}
+                  </TableHead>
                 ))}
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -212,13 +250,41 @@ export default function Balancete() {
                 const over = remaining < 0;
 
                 return (
-                  <TableRow key={l.id} className={cn(l.is_subtotal ? "bg-black/[0.03]" : "", over ? "bg-red-50" : "")}>
+                  <TableRow
+                    key={l.id}
+                    className={cn(l.is_subtotal ? "bg-black/[0.03]" : "", over ? "bg-red-50" : "")}
+                  >
                     <TableCell className="text-sm text-[hsl(var(--muted-ink))]">{cat}</TableCell>
-                    <TableCell className={cn("font-medium", l.is_subtotal ? "text-[hsl(var(--muted-ink))]" : "text-[hsl(var(--ink))]")}>{l.name}</TableCell>
-                    <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(approved)}</TableCell>
-                    <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(executed)}</TableCell>
-                    <TableCell className={cn("text-right font-semibold", over ? "text-red-700" : "text-[hsl(var(--ink))]")}>{formatBRL(remaining)}</TableCell>
-                    <TableCell className={cn("text-right", over ? "text-red-700" : "text-[hsl(var(--muted-ink))]")}>{pct.toFixed(1)}%</TableCell>
+                    <TableCell
+                      className={cn(
+                        "font-medium",
+                        l.is_subtotal ? "text-[hsl(var(--muted-ink))]" : "text-[hsl(var(--ink))]"
+                      )}
+                    >
+                      {l.name}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                      {formatBRL(approved)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                      {formatBRL(executed)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-semibold",
+                        over ? "text-red-700" : "text-[hsl(var(--ink))]"
+                      )}
+                    >
+                      {formatBRL(remaining)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right",
+                        over ? "text-red-700" : "text-[hsl(var(--muted-ink))]"
+                      )}
+                    >
+                      {pct.toFixed(1)}%
+                    </TableCell>
                     {monthCols.map((m) => (
                       <TableCell key={m.key} className="text-right text-[hsl(var(--muted-ink))]">
                         {formatBRL(agg?.byMonth?.[m.key] ?? 0)}
@@ -247,7 +313,10 @@ export default function Balancete() {
 
               {!rows.length && (
                 <TableRow>
-                  <TableCell colSpan={7 + monthCols.length} className="py-8 text-center text-sm text-[hsl(var(--muted-ink))]">
+                  <TableCell
+                    colSpan={7 + monthCols.length}
+                    className="py-8 text-center text-sm text-[hsl(var(--muted-ink))]"
+                  >
                     Nenhuma rubrica encontrada.
                   </TableCell>
                 </TableRow>

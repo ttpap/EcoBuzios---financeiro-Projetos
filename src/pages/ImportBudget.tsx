@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatBRL } from "@/lib/money";
 import { toast } from "sonner";
 import { FileUp, Wand2 } from "lucide-react";
+import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 
 export default function ImportBudget() {
   const { session } = useSession();
@@ -43,7 +44,19 @@ export default function ImportBudget() {
       if (!session?.user?.id) throw new Error("Sem sessão");
       if (!parsed) throw new Error("Faça a leitura primeiro");
 
-      // Create budget
+      // Upload do arquivo original para o Storage (MVP)
+      const storagePath = `${activeProjectId}/${Date.now()}-${file?.name ?? "orcamento"}`;
+      if (file) {
+        const { error: upErr } = await supabase.storage
+          .from("balancete")
+          .upload(storagePath, file, { upsert: true });
+        if (upErr) {
+          // Se o bucket não existir, seguimos sem o arquivo no MVP.
+          console.warn("Falha ao subir arquivo no storage", upErr);
+        }
+      }
+
+      // Create budget (estrutura antiga permanece para balancete mensal)
       const { data: budget, error: bErr } = await supabase
         .from("budgets")
         .insert({
@@ -90,12 +103,54 @@ export default function ImportBudget() {
       );
       if (lErr) throw lErr;
 
-      // Save an imports record (lightweight MVP)
+      // Grava também na estrutura "profissional" do módulo (briefing)
+      const totalImportado = (parsed.lines ?? []).reduce(
+        (acc, l) => acc + (l.isSubtotal ? 0 : l.totalApproved),
+        0
+      );
+
+      const { data: oi, error: oiErr } = await supabase
+        .from("orcamentos_importados")
+        .insert({
+          projeto_id: activeProjectId,
+          nome_arquivo: file?.name ?? null,
+          tipo_arquivo: file?.type || null,
+          arquivo_url: file ? storagePath : null,
+          total_orcamento: totalImportado,
+          status_importacao: "confirmed",
+        })
+        .select("*")
+        .single();
+      if (oiErr) throw oiErr;
+
+      const { error: roErr } = await supabase.from("rubricas_orcamento").insert(
+        parsed.lines
+          .filter((l) => !l.isSubtotal)
+          .map((l, i) => ({
+            projeto_id: activeProjectId,
+            orcamento_importado_id: oi.id,
+            codigo_rubrica: null,
+            rubrica: l.name,
+            descricao: null,
+            categoria: parsed.categories.find((c) => c.key === l.categoryKey)?.name ?? null,
+            unidade: null,
+            quantidade: l.quantity ?? null,
+            valor_unitario: l.unitValue ?? null,
+            valor_original: l.totalApproved,
+            valor_utilizado: 0,
+            saldo_restante: l.totalApproved,
+            percentual_executado: 0,
+            ordem: i,
+          }))
+      );
+      if (roErr) throw roErr;
+
+      // Save an imports record (legacy)
       await supabase.from("imports").insert({
         project_id: activeProjectId,
         status: "confirmed",
-        file_name: file.name,
-        file_type: file.type || "unknown",
+        file_name: file?.name ?? null,
+        file_type: file?.type || "unknown",
         parsed_budget_json: parsed,
         created_by_user_id: session.user.id,
       });
@@ -112,10 +167,15 @@ export default function ImportBudget() {
   });
 
   const previewRows = useMemo(() => parsed?.lines.slice(0, 30) ?? [], [parsed]);
-  const totalApproved = useMemo(() => (parsed?.lines ?? []).reduce((acc, l) => acc + (l.isSubtotal ? 0 : l.totalApproved), 0), [parsed]);
+  const totalApproved = useMemo(
+    () => (parsed?.lines ?? []).reduce((acc, l) => acc + (l.isSubtotal ? 0 : l.totalApproved), 0),
+    [parsed]
+  );
 
   return (
     <div className="grid gap-6">
+      <BalanceteTabs />
+
       <div className="rounded-3xl border bg-white p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
@@ -125,7 +185,7 @@ export default function ImportBudget() {
             </div>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">Planilha → Balancete</h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              MVP: Excel/CSV. O sistema interpreta categorias e rubricas e cria o orçamento.
+              Etapa 2/3: leitura de Excel/CSV. PDF/imagem (OCR) entra na próxima etapa.
             </p>
           </div>
         </div>
@@ -139,15 +199,15 @@ export default function ImportBudget() {
         <Card className="rounded-3xl border bg-white p-6 shadow-sm">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="md:col-span-2">
-              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Arquivo (CSV/XLSX)</div>
+              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Arquivo (XLS/XLSX/CSV/PDF/Imagem)</div>
               <Input
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg"
                 className="mt-1 rounded-2xl"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
               <div className="mt-2 text-xs text-[hsl(var(--muted-ink))]">
-                Dica: tenha uma coluna de “Item/Rubrica” e uma de “Subtotal total/Total”.
+                No MVP atual, PDF/imagem serão armazenados, mas a leitura inteligente completa (OCR) entra na próxima etapa.
               </div>
             </div>
 
@@ -191,9 +251,7 @@ export default function ImportBudget() {
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-[hsl(var(--ink))]">Prévia</div>
-                  <div className="text-xs text-[hsl(var(--muted-ink))]">
-                    Mostrando até 30 linhas (você poderá refinar na próxima etapa).
-                  </div>
+                  <div className="text-xs text-[hsl(var(--muted-ink))]">Mostrando até 30 linhas.</div>
                 </div>
                 <div className="text-sm font-semibold text-[hsl(var(--ink))]">Total importado: {formatBRL(totalApproved)}</div>
               </div>
@@ -211,7 +269,7 @@ export default function ImportBudget() {
                     {previewRows.map((r, idx) => (
                       <TableRow key={idx} className={r.isSubtotal ? "bg-black/[0.03]" : ""}>
                         <TableCell className="text-sm text-[hsl(var(--muted-ink))]">
-                          {(parsed.categories.find((c) => c.key === r.categoryKey)?.name ?? "Geral")}
+                          {parsed.categories.find((c) => c.key === r.categoryKey)?.name ?? "Geral"}
                         </TableCell>
                         <TableCell className="font-medium text-[hsl(var(--ink))]">{r.name}</TableCell>
                         <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(r.totalApproved)}</TableCell>
