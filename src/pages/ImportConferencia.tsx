@@ -52,20 +52,27 @@ function moneyInputToNumber(v: string) {
   return parsePtBrMoneyToNumber(v);
 }
 
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 export default function ImportConferencia() {
   const { id } = useParams();
+  const importId = id ?? "";
+  const validId = Boolean(importId && isUuid(importId));
+
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
 
   const importQuery = useQuery({
-    queryKey: ["orcamentoImportado", id],
-    enabled: Boolean(id),
+    queryKey: ["orcamentoImportado", importId],
+    enabled: validId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orcamentos_importados")
         .select("*")
-        .eq("id", id)
+        .eq("id", importId)
         .single();
       if (error) throw error;
       return data as any;
@@ -160,7 +167,7 @@ export default function ImportConferencia() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      if (!id) throw new Error("Importação inválida");
+      if (!validId) throw new Error("Importação inválida");
       if (!activeProjectId) throw new Error("Selecione um projeto");
       if (importQuery.data?.projeto_id !== activeProjectId) {
         throw new Error("Esta importação pertence a outro projeto");
@@ -191,19 +198,19 @@ export default function ImportConferencia() {
             reviewedAt: new Date().toISOString(),
           },
         })
-        .eq("id", id);
+        .eq("id", importId);
       if (uErr) throw uErr;
 
       const { error: dErr } = await supabase
         .from("rubricas_orcamento")
         .delete()
-        .eq("orcamento_importado_id", id);
+        .eq("orcamento_importado_id", importId);
       if (dErr) throw dErr;
 
       const { error: iErr } = await supabase.from("rubricas_orcamento").insert(
         cleaned.map((l) => ({
           projeto_id: activeProjectId,
-          orcamento_importado_id: id,
+          orcamento_importado_id: importId,
           codigo_rubrica: null,
           rubrica: l.rubrica,
           descricao: null,
@@ -229,6 +236,30 @@ export default function ImportConferencia() {
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao confirmar"),
   });
+
+  if (!validId) {
+    return (
+      <div className="grid gap-6">
+        <BalanceteTabs />
+        <div className="rounded-3xl border bg-white p-6">
+          <div className="text-sm font-semibold text-[hsl(var(--ink))]">
+            Link de conferência inválido
+          </div>
+          <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
+            O identificador desta importação não parece válido. Volte e selecione a importação novamente.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4 rounded-full"
+            onClick={() => navigate("/balancete/importar")}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar para Importar
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!activeProjectId) {
     return (
