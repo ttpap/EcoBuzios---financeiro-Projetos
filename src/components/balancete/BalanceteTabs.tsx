@@ -18,7 +18,7 @@ export function BalanceteTabs() {
     <Card className="rounded-3xl border bg-white p-2 shadow-sm">
       <div className="flex flex-wrap gap-2">
         {tabs.map((t) => {
-          const active = location.pathname === t.to;
+          const active = location.pathname === t.to || location.pathname.startsWith(t.to + "/");
           return (
             <Link
               key={t.to}

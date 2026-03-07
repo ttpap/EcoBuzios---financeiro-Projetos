@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { useAppStore } from "@/lib/appStore";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/context/SessionContext";
@@ -30,6 +31,21 @@ export default function ImportBudget() {
   const [parseOut, setParseOut] = useState<ParseOutput | null>(null);
   const [monthsCount, setMonthsCount] = useState<number>(12);
   const [budgetName, setBudgetName] = useState<string>("Orçamento");
+
+  const importsQuery = useQuery({
+    queryKey: ["orcamentosImportados", activeProjectId],
+    enabled: Boolean(activeProjectId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orcamentos_importados")
+        .select("id,nome_arquivo,status_importacao,created_at,total_orcamento")
+        .eq("projeto_id", activeProjectId!)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+  });
 
   const parseMutation = useMutation({
     mutationFn: async () => {
@@ -74,41 +90,34 @@ export default function ImportBudget() {
       const ext = safeFileExt(file.name);
       const storagePath = buildProjectStoragePath(activeProjectId, file.name);
 
-      // 1) Storage: salvar arquivo original
       const { error: upErr } = await supabase.storage
         .from("balancete")
         .upload(storagePath, file, { upsert: true, contentType: file.type || undefined });
       if (upErr) throw upErr;
 
-      const { data: pub } = supabase.storage.from("balancete").getPublicUrl(storagePath);
-      // Bucket é privado; ainda assim guardamos a URL gerada (útil quando configurarmos signed URLs)
-      const arquivo_url = pub?.publicUrl ?? null;
-
-      // 2) Criar registro de importação (status=review inicialmente)
-      const baseImport = {
-        projeto_id: activeProjectId,
-        nome_arquivo: file.name,
-        tipo_arquivo: file.type || ext,
-        arquivo_url,
-        status_importacao: "review",
-        extracted_raw_json:
-          parseOut?.kind === "pdf"
-            ? { kind: "pdf", text: parseOut.text.slice(0, 20000) }
-            : parseOut?.kind === "image"
-              ? { kind: "image" }
-              : null,
-        parsed_budget_json: parseOut?.kind === "budget" ? parseOut.parsed : null,
-        erros_json: null,
-      };
-
+      // Cria importação em modo conferência
       const { data: oi, error: oiErr } = await supabase
         .from("orcamentos_importados")
-        .insert(baseImport)
+        .insert({
+          projeto_id: activeProjectId,
+          nome_arquivo: file.name,
+          tipo_arquivo: file.type || ext,
+          arquivo_path: storagePath,
+          arquivo_url: null,
+          status_importacao: "review",
+          extracted_raw_json:
+            parseOut?.kind === "pdf"
+              ? { kind: "pdf", text: parseOut.text.slice(0, 20000) }
+              : parseOut?.kind === "image"
+                ? { kind: "image" }
+                : null,
+          parsed_budget_json: parseOut?.kind === "budget" ? parseOut.parsed : null,
+          erros_json: null,
+        })
         .select("*")
         .single();
       if (oiErr) throw oiErr;
 
-      // 3) Se já temos planilha estruturada (xlsx/csv), também criamos o orçamento no MVP (budgets/budget_lines)
       if (parseOut?.kind === "budget") {
         const parsed = parseOut.parsed;
 
@@ -156,40 +165,6 @@ export default function ImportBudget() {
         );
         if (lErr) throw lErr;
 
-        // Estrutura profissional (rubricas_orcamento) como base do orçamento
-        const totalImportado = (parsed.lines ?? []).reduce(
-          (acc, l) => acc + (l.isSubtotal ? 0 : l.totalApproved),
-          0
-        );
-
-        const { error: upOiErr } = await supabase
-          .from("orcamentos_importados")
-          .update({ total_orcamento: totalImportado, status_importacao: "review" })
-          .eq("id", oi.id);
-        if (upOiErr) throw upOiErr;
-
-        const { error: roErr } = await supabase.from("rubricas_orcamento").insert(
-          parsed.lines
-            .filter((l) => !l.isSubtotal)
-            .map((l, i) => ({
-              projeto_id: activeProjectId,
-              orcamento_importado_id: oi.id,
-              codigo_rubrica: null,
-              rubrica: l.name,
-              descricao: null,
-              categoria: parsed.categories.find((c) => c.key === l.categoryKey)?.name ?? null,
-              unidade: null,
-              quantidade: l.quantity ?? null,
-              valor_unitario: l.unitValue ?? null,
-              valor_original: l.totalApproved,
-              valor_utilizado: 0,
-              saldo_restante: l.totalApproved,
-              percentual_executado: 0,
-              ordem: i,
-            }))
-        );
-        if (roErr) throw roErr;
-
         setActiveBudgetId(budget.id);
         queryClient.invalidateQueries({ queryKey: ["activeBudget", activeProjectId] });
         queryClient.invalidateQueries({ queryKey: ["dashboardTotals", activeProjectId, budget.id] });
@@ -197,11 +172,12 @@ export default function ImportBudget() {
 
       return oi.id as string;
     },
-    onSuccess: () => {
-      toast.success("Arquivo enviado e importação criada (modo conferência)");
-      queryClient.invalidateQueries({ queryKey: ["imports"] });
+    onSuccess: (importId) => {
+      toast.success("Arquivo enviado. Agora confira antes de confirmar.");
+      queryClient.invalidateQueries({ queryKey: ["orcamentosImportados", activeProjectId] });
+      window.location.assign(`/balancete/importar/${importId}`);
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao confirmar"),
+    onError: (e: any) => toast.error(e.message ?? "Falha ao enviar"),
   });
 
   const previewRows = useMemo(() => {
@@ -228,13 +204,51 @@ export default function ImportBudget() {
               <FileUp className="h-3.5 w-3.5" />
               Importar orçamento
             </div>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">Upload + leitura inicial</h1>
+            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
+              Upload + prévia
+            </h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Etapa 2: salvar arquivo no Storage e gerar prévia. Excel/CSV já vira rubricas; PDF/imagem entram como prévia e evoluem para OCR/tabela na Etapa 3.
+              Próximo passo: conferência (corrigir rubricas/valores) antes de confirmar.
             </p>
           </div>
         </div>
       </div>
+
+      {!!(importsQuery.data ?? []).length && (
+        <Card className="rounded-3xl border bg-white p-6 shadow-sm">
+          <div className="text-sm font-semibold text-[hsl(var(--ink))]">Importações recentes</div>
+          <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
+            Clique em uma importação em modo conferência para revisar.
+          </div>
+
+          <div className="mt-4 overflow-hidden rounded-2xl border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Arquivo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(importsQuery.data ?? []).map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="text-sm font-medium text-[hsl(var(--ink))]">{r.nome_arquivo ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-[hsl(var(--muted-ink))]">{r.status_importacao}</TableCell>
+                    <TableCell className="text-right text-sm font-semibold text-[hsl(var(--ink))]">{formatBRL(Number(r.total_orcamento ?? 0))}</TableCell>
+                    <TableCell className="text-right">
+                      <Button asChild variant="outline" className="rounded-full">
+                        <Link to={`/balancete/importar/${r.id}`}>Conferir</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
 
       {!activeProjectId ? (
         <div className="rounded-3xl border bg-white p-6 text-sm text-[hsl(var(--muted-ink))]">
@@ -255,7 +269,7 @@ export default function ImportBudget() {
                 }}
               />
               <div className="mt-2 text-xs text-[hsl(var(--muted-ink))]">
-                Regra do Storage: o arquivo é salvo como <span className="font-medium">{activeProjectId}/...</span>
+                O arquivo será salvo no Storage como <span className="font-medium">{activeProjectId}/...</span>
               </div>
             </div>
 
