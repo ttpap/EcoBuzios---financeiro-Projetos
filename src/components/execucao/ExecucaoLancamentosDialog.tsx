@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { BudgetLine, Transaction } from "@/lib/supabaseTypes";
@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -18,7 +19,7 @@ import { toast } from "sonner";
 import { VendorCombobox, type Vendor } from "@/components/execucao/VendorCombobox";
 import { cn } from "@/lib/utils";
 import { PDFDocument } from "pdf-lib";
-import { Download, FileUp, Trash2, Eye } from "lucide-react";
+import { Download, FileUp, Trash2, Eye, Pencil, X } from "lucide-react";
 
 type PaymentMethod = "transferencia" | "cheque" | "boleto" | "pix";
 
@@ -34,7 +35,6 @@ function safeFileName(name: string) {
 
 async function compressPdf(file: File): Promise<Uint8Array> {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  // "Compressão" básica: re-salva via pdf-lib com compressão de objetos.
   const pdfDoc = await PDFDocument.load(bytes);
   const out = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
   return out;
@@ -65,7 +65,7 @@ export function ExecucaoLancamentosDialog({
   budgetId: string;
   line: BudgetLine | null;
   monthIndex: number;
-  monthRef: string; // YYYY-MM-01 (estável)
+  monthRef: string;
 }) {
   const queryClient = useQueryClient();
 
@@ -97,7 +97,53 @@ export function ExecucaoLancamentosDialog({
   const [dueDate, setDueDate] = useState("");
   const [paidDate, setPaidDate] = useState("");
   const [amount, setAmount] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
+
+  const [editing, setEditing] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setEditing(null);
+      setVendor(null);
+      setPaymentMethod("");
+      setDocumentNumber("");
+      setDueDate("");
+      setPaidDate("");
+      setAmount("");
+      setNotes("");
+      setFile(null);
+      return;
+    }
+
+    // Ao abrir, se tiver apenas 1 lançamento, já deixa pronto para editar.
+    const list = txQuery.data ?? [];
+    if (list.length === 1) {
+      const t: any = list[0];
+      setEditing(t as Transaction);
+      setPaymentMethod((t.payment_method as any) || "");
+      setDocumentNumber(t.document_number || "");
+      setDueDate(t.due_date || "");
+      setPaidDate(t.paid_date || "");
+      setAmount(String(t.amount ?? 0).replace(".", ","));
+      setNotes(t.notes || "");
+      // Vendor: nesta versão, o usuário re-seleciona (combobox carrega por projeto)
+      setVendor(null);
+      setFile(null);
+    }
+  }, [open, txQuery.data]);
+
+  const signedUrl = useMutation({
+    mutationFn: async (path: string) => {
+      const { data, error } = await supabase.storage.from("invoices").createSignedUrl(path, 60);
+      if (error) throw error;
+      return data.signedUrl;
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao gerar link"),
+  });
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
 
   const createTx = useMutation({
     mutationFn: async () => {
@@ -145,6 +191,7 @@ export function ExecucaoLancamentosDialog({
           amount: parsedAmount,
           description: line.name,
           document_number: documentNumber.trim() || null,
+          notes: notes.trim() || null,
           created_by_user_id: userId,
           vendor_id: vendor.id,
           payment_method: paymentMethod,
@@ -161,15 +208,87 @@ export function ExecucaoLancamentosDialog({
     },
     onSuccess: () => {
       toast.success("Lançamento salvo");
+      setEditing(null);
+      setVendor(null);
+      setPaymentMethod("");
       setDocumentNumber("");
       setDueDate("");
       setPaidDate("");
       setAmount("");
+      setNotes("");
       setFile(null);
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
+  });
+
+  const updateTx = useMutation({
+    mutationFn: async () => {
+      if (!editing?.id) throw new Error("Selecione um lançamento para editar");
+      if (!vendor?.id) throw new Error("Selecione um fornecedor");
+      if (!paymentMethod) throw new Error("Selecione a forma de pagamento");
+      if (!paidDate) throw new Error("Informe a data de pagamento");
+
+      const parsedAmount = parsePtBrMoneyToNumber(amount);
+      if (!parsedAmount || parsedAmount <= 0) throw new Error("Informe um valor válido");
+
+      let invoice_path: string | null | undefined;
+      let invoice_file_name: string | null | undefined;
+      let invoice_size_bytes: number | null | undefined;
+
+      const oldPath = (editing as any).invoice_path as string | null | undefined;
+
+      if (file) {
+        if (file.type !== "application/pdf") throw new Error("Anexe um PDF");
+
+        const compressed = await compressPdf(file);
+        const safeName = safeFileName(file.name || "nota-fiscal.pdf");
+        const path = `${projectId}/${Date.now()}-${safeName}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("invoices")
+          .upload(path, compressed, { contentType: "application/pdf", upsert: false });
+        if (upErr) throw upErr;
+
+        invoice_path = path;
+        invoice_file_name = safeName;
+        invoice_size_bytes = compressed.byteLength;
+
+        if (oldPath && oldPath !== path) {
+          await supabase.storage.from("invoices").remove([oldPath]);
+        }
+      }
+
+      const { data, error } = await supabase
+        .from("transactions")
+        .update({
+          vendor_id: vendor.id,
+          payment_method: paymentMethod,
+          document_number: documentNumber.trim() || null,
+          due_date: dueDate || null,
+          paid_date: paidDate,
+          date: paidDate,
+          amount: parsedAmount,
+          notes: notes.trim() || null,
+          ...(invoice_path !== undefined
+            ? { invoice_path, invoice_file_name, invoice_size_bytes }
+            : {}),
+        } as any)
+        .eq("id", editing.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      return data as Transaction;
+    },
+    onSuccess: () => {
+      toast.success("Lançamento atualizado");
+      setEditing(null);
+      setFile(null);
+      queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef] });
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar"),
   });
 
   const deleteTx = useMutation({
@@ -189,17 +308,7 @@ export function ExecucaoLancamentosDialog({
     onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
   });
 
-  const signedUrl = useMutation({
-    mutationFn: async (path: string) => {
-      const { data, error } = await supabase.storage.from("invoices").createSignedUrl(path, 60);
-      if (error) throw error;
-      return data.signedUrl;
-    },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao gerar link"),
-  });
-
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const canEdit = editing != null;
 
   return (
     <>
@@ -217,6 +326,33 @@ export function ExecucaoLancamentosDialog({
               <div className="mt-1 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
                 {formatBRL(monthTotal)}
               </div>
+
+              {editing && (
+                <div className="mt-3 flex items-center justify-between rounded-2xl border bg-[hsl(var(--app-bg))] px-3 py-2">
+                  <div className="text-xs text-[hsl(var(--muted-ink))]">
+                    Editando lançamento: <span className="font-medium text-[hsl(var(--ink))]">{editing.id.slice(0, 8)}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-full"
+                    onClick={() => {
+                      setEditing(null);
+                      setVendor(null);
+                      setPaymentMethod("");
+                      setDocumentNumber("");
+                      setDueDate("");
+                      setPaidDate("");
+                      setAmount("");
+                      setNotes("");
+                      setFile(null);
+                    }}
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Sair da edição
+                  </Button>
+                </div>
+              )}
 
               <div className="mt-4 grid gap-3">
                 <div>
@@ -266,6 +402,11 @@ export function ExecucaoLancamentosDialog({
                 </div>
 
                 <div>
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Observações</div>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="rounded-2xl" />
+                </div>
+
+                <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexar Nota Fiscal (PDF)</div>
                   <div className="flex items-center gap-2">
                     <Input
@@ -285,14 +426,25 @@ export function ExecucaoLancamentosDialog({
                   </div>
                 </div>
 
-                <Button
-                  onClick={() => createTx.mutate()}
-                  disabled={createTx.isPending}
-                  className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-                >
-                  <FileUp className="mr-2 h-4 w-4" />
-                  Salvar lançamento
-                </Button>
+                {!canEdit ? (
+                  <Button
+                    onClick={() => createTx.mutate()}
+                    disabled={createTx.isPending}
+                    className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+                  >
+                    <FileUp className="mr-2 h-4 w-4" />
+                    Salvar lançamento
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => updateTx.mutate()}
+                    disabled={updateTx.isPending}
+                    className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Salvar alterações
+                  </Button>
+                )}
               </div>
             </Card>
 
@@ -303,7 +455,8 @@ export function ExecucaoLancamentosDialog({
                   <div
                     key={t.id}
                     className={cn(
-                      "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3"
+                      "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3",
+                      editing?.id === t.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
                     )}
                   >
                     <div className="min-w-0">
@@ -313,33 +466,61 @@ export function ExecucaoLancamentosDialog({
                         {t.document_number ? ` · Doc: ${t.document_number}` : ""}
                       </div>
 
-                      {t.invoice_file_name && t.invoice_path && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full"
-                            onClick={async () => {
-                              const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                              setPreviewUrl(url);
-                              setPreviewOpen(true);
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Visualizar
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full"
-                            onClick={async () => {
-                              const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                              downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
-                            }}
-                          >
-                            <Download className="mr-2 h-4 w-4" />
-                            Baixar
-                          </Button>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 rounded-full"
+                          onClick={() => {
+                            setEditing(t as Transaction);
+                            setPaymentMethod((t.payment_method as any) || "");
+                            setDocumentNumber(t.document_number || "");
+                            setDueDate(t.due_date || "");
+                            setPaidDate(t.paid_date || "");
+                            setAmount(String(t.amount ?? 0).replace(".", ","));
+                            setNotes(t.notes || "");
+                            setVendor(null);
+                            setFile(null);
+                          }}
+                        >
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Editar
+                        </Button>
+
+                        {t.invoice_file_name && t.invoice_path && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 rounded-full"
+                              onClick={async () => {
+                                const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                                setPreviewUrl(url);
+                                setPreviewOpen(true);
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Visualizar
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 rounded-full"
+                              onClick={async () => {
+                                const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                                downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
+                              }}
+                            >
+                              <Download className="mr-2 h-4 w-4" />
+                              Baixar
+                            </Button>
+                          </>
+                        )}
+                      </div>
+
+                      {!t.invoice_path && (
+                        <div className="mt-2 text-xs font-medium text-red-700">
+                          Sem PDF anexado.
                         </div>
                       )}
                     </div>

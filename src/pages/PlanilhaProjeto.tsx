@@ -40,6 +40,19 @@ function calcMonthAmount(line: BudgetLine, monthIndex1: number) {
   return monthlyValue(total, months);
 }
 
+function nextSubitemCode(itemCode: number, existingCodes: Array<string | null | undefined>) {
+  const prefix = `${itemCode}.`;
+  let max = 0;
+  for (const c of existingCodes) {
+    const s = String(c ?? "").trim();
+    if (!s.startsWith(prefix)) continue;
+    const tail = s.slice(prefix.length);
+    const n = Number(tail.split(".")[0]);
+    if (Number.isFinite(n)) max = Math.max(max, Math.trunc(n));
+  }
+  return `${itemCode}.${max + 1}`;
+}
+
 export default function PlanilhaProjeto() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -137,7 +150,8 @@ export default function PlanilhaProjeto() {
     },
   });
 
-  const monthsCount = budgetQuery.data?.months_count ?? Number((projectQuery.data as any)?.duration_months ?? 12) ?? 12;
+  const monthsCount =
+    budgetQuery.data?.months_count ?? Number((projectQuery.data as any)?.duration_months ?? 12) ?? 12;
   const monthCols = useMemo(() => buildMonthLabels(monthsCount), [monthsCount]);
 
   const [newItemCode, setNewItemCode] = useState<string>("");
@@ -182,13 +196,22 @@ export default function PlanilhaProjeto() {
     mutationFn: async (categoryId: string) => {
       if (!budgetQuery.data?.id) throw new Error("Orçamento não carregado");
 
+      const cat = (categoriesQuery.data ?? []).find((c) => c.id === categoryId);
+      if (!cat) throw new Error("Item inválido");
+
+      const existingCodes = (linesQuery.data ?? [])
+        .filter((l) => l.category_id === categoryId)
+        .map((l) => l.code);
+
+      const code = nextSubitemCode(Number((cat as any).code), existingCodes);
+
       const sortOrder = (linesQuery.data?.length ?? 0) + 1;
       const { data, error } = await supabase
         .from("budget_lines")
         .insert({
           budget_id: budgetQuery.data.id,
           category_id: categoryId,
-          code: "",
+          code,
           name: "",
           total_approved: 0,
           start_month: 1,
@@ -295,7 +318,9 @@ export default function PlanilhaProjeto() {
               Balancete PRO
             </h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              {projectQuery.data?.project_number ? `#${(projectQuery.data as any).project_number} · ` : ""}
+              {projectQuery.data?.project_number
+                ? `#${(projectQuery.data as any).project_number} · `
+                : ""}
               {projectQuery.data?.name} · {monthsCount} meses
             </p>
           </div>
@@ -389,19 +414,16 @@ export default function PlanilhaProjeto() {
 
                       return (
                         <TableRow key={l.id}>
-                          <TableCell className="text-sm text-[hsl(var(--muted-ink))]">
-                            <Input
-                              value={l.code ?? ""}
-                              onChange={(e) => updateLine.mutate({ id: l.id, patch: { code: e.target.value } })}
-                              className="h-9 w-24 rounded-full"
-                              inputMode="numeric"
-                            />
+                          <TableCell className="text-sm font-semibold text-[hsl(var(--ink))]">
+                            {l.code || ""}
                           </TableCell>
 
                           <TableCell>
                             <Input
                               value={l.name}
-                              onChange={(e) => updateLine.mutate({ id: l.id, patch: { name: e.target.value } })}
+                              onChange={(e) =>
+                                updateLine.mutate({ id: l.id, patch: { name: e.target.value } })
+                              }
                               className="h-9 rounded-full"
                             />
                           </TableCell>
@@ -412,7 +434,9 @@ export default function PlanilhaProjeto() {
                               onChange={(e) =>
                                 updateLine.mutate({
                                   id: l.id,
-                                  patch: { total_approved: parsePtBrMoneyToNumber(e.target.value) } as any,
+                                  patch: {
+                                    total_approved: parsePtBrMoneyToNumber(e.target.value),
+                                  } as any,
                                 })
                               }
                               className="h-9 rounded-full text-right"
@@ -449,16 +473,16 @@ export default function PlanilhaProjeto() {
                               value={end}
                               onChange={(e) => {
                                 const nextEnd = clampInt(Number(e.target.value), 1, monthsCount);
-                                updateLine.mutate({ id: l.id, patch: { end_month: nextEnd } as any });
+                                updateLine.mutate({
+                                  id: l.id,
+                                  patch: { end_month: nextEnd } as any,
+                                });
                               }}
                               className={cn(
                                 "h-9 w-24 rounded-full text-right",
                                 invalid ? "border-red-300" : ""
                               )}
                             />
-                            {invalid && (
-                              <div className="mt-1 text-[11px] text-red-600">Período inválido.</div>
-                            )}
                           </TableCell>
 
                           {monthCols.map((m) => {
@@ -506,7 +530,10 @@ export default function PlanilhaProjeto() {
                   <TableCell />
                   <TableCell />
                   {monthCols.map((m) => (
-                    <TableCell key={m.idx} className="text-right font-semibold text-[hsl(var(--ink))]">
+                    <TableCell
+                      key={m.idx}
+                      className="text-right font-semibold text-[hsl(var(--ink))]"
+                    >
                       {formatBRL(totalsByMonth[m.idx - 1] ?? 0)}
                     </TableCell>
                   ))}

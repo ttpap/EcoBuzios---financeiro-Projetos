@@ -101,6 +101,7 @@ export default function ExecucaoProjeto() {
     const byLineMonth = new Map<string, number>();
     const byLine = new Map<string, number>();
     const byMonth = new Map<string, number>();
+    const missingInvoice = new Set<string>(); // key: lineId__monthRef
     let total = 0;
 
     for (const t of txQuery.data ?? []) {
@@ -112,9 +113,12 @@ export default function ExecucaoProjeto() {
       byLine.set(lineId, (byLine.get(lineId) ?? 0) + amount);
       byMonth.set(mk, (byMonth.get(mk) ?? 0) + amount);
       byLineMonth.set(`${lineId}__${mk}`, (byLineMonth.get(`${lineId}__${mk}`) ?? 0) + amount);
+
+      const hasPdf = Boolean((t as any).invoice_path);
+      if (!hasPdf) missingInvoice.add(`${lineId}__${mk}`);
     }
 
-    return { total, byLine, byMonth, byLineMonth };
+    return { total, byLine, byMonth, byLineMonth, missingInvoice };
   }, [txQuery.data]);
 
   const plannedAgg = useMemo(() => {
@@ -276,8 +280,9 @@ export default function ExecucaoProjeto() {
 
                           {monthCols.map((m) => {
                             const mk = monthRefFromIndex(m.idx);
-                            const planned = plannedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
-                            const executed = executedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
+                            const key = `${l.id}__${mk}`;
+                            const planned = plannedAgg.byLineMonth.get(key) ?? 0;
+                            const executed = executedAgg.byLineMonth.get(key) ?? 0;
                             const remaining = planned - executed;
 
                             const showValue = executed === 0 ? planned : remaining;
@@ -285,6 +290,7 @@ export default function ExecucaoProjeto() {
                             const isPartial = executed > 0 && executed < planned;
                             const isExact = planned > 0 && executed === planned;
                             const isUnplannedSpend = planned === 0 && executed > 0;
+                            const needsPdf = executed > 0 && executedAgg.missingInvoice.has(key);
 
                             const bg = isUnplannedSpend || isOver
                               ? "bg-red-50"
@@ -314,9 +320,10 @@ export default function ExecucaoProjeto() {
                                       className={cn(
                                         "w-full rounded-xl px-2 py-1 text-sm transition",
                                         bg,
-                                        planned || executed ? "hover:bg-black/5" : "hover:bg-black/5",
+                                        "hover:bg-black/5",
                                         fg,
-                                        (planned || executed) ? "font-semibold" : ""
+                                        (planned || executed) ? "font-semibold" : "",
+                                        needsPdf ? "ring-1 ring-red-500" : ""
                                       )}
                                       onClick={() => {
                                         setSelectedLine(l);
@@ -327,7 +334,7 @@ export default function ExecucaoProjeto() {
                                       {formatBRL(showValue)}
                                     </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-[260px]">
+                                  <TooltipContent className="max-w-[280px]">
                                     <div className="grid gap-1 text-xs">
                                       <div>
                                         <span className="text-[hsl(var(--muted-ink))]">Planejado:</span>{" "}
@@ -341,6 +348,11 @@ export default function ExecucaoProjeto() {
                                         <span className="text-[hsl(var(--muted-ink))]">Saldo:</span>{" "}
                                         <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(remaining)}</span>
                                       </div>
+                                      {needsPdf && (
+                                        <div className="pt-1 text-red-700">
+                                          Há lançamento(s) sem PDF anexado.
+                                        </div>
+                                      )}
                                     </div>
                                   </TooltipContent>
                                 </Tooltip>
@@ -354,10 +366,12 @@ export default function ExecucaoProjeto() {
                           <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
                             {formatBRL(totals.executed)}
                           </TableCell>
-                          <TableCell className={cn(
-                            "text-right font-semibold",
-                            saldoLine < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
-                          )}>
+                          <TableCell
+                            className={cn(
+                              "text-right font-semibold",
+                              saldoLine < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                            )}
+                          >
                             {formatBRL(saldoLine)}
                           </TableCell>
                         </TableRow>
@@ -371,19 +385,24 @@ export default function ExecucaoProjeto() {
                 <TableCell />
                 <TableCell className="font-semibold text-[hsl(var(--ink))]">TOTAL GERAL</TableCell>
                 {footerByMonth.map((m) => (
-                  <TableCell key={m.mk} className={cn(
-                    "text-right font-semibold",
-                    m.remaining < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
-                  )}>
+                  <TableCell
+                    key={m.mk}
+                    className={cn(
+                      "text-right font-semibold",
+                      m.remaining < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                    )}
+                  >
                     {formatBRL(m.remaining)}
                   </TableCell>
                 ))}
                 <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total)}</TableCell>
                 <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(executedAgg.total)}</TableCell>
-                <TableCell className={cn(
-                  "text-right font-semibold",
-                  plannedAgg.total - executedAgg.total < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
-                )}>
+                <TableCell
+                  className={cn(
+                    "text-right font-semibold",
+                    plannedAgg.total - executedAgg.total < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                  )}
+                >
                   {formatBRL(plannedAgg.total - executedAgg.total)}
                 </TableCell>
               </TableRow>
