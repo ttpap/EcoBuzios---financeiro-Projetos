@@ -1,6 +1,9 @@
 export type Project = {
   id: string;
   owner_user_id: string;
+  project_number?: string | null;
+  duration_months?: number;
+  deleted_at?: string | null;
   name: string;
   description: string | null;
   start_date: string | null;
@@ -31,6 +34,9 @@ export type BudgetLine = {
   id: string;
   budget_id: string;
   category_id: string | null;
+  code?: string | null;
+  start_month?: number;
+  duration_months?: number;
   name: string;
   quantity: number | null;
   unit_value: number | null;
