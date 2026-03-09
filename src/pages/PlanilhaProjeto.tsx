@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 
 function clampInt(v: number, min: number, max: number) {
   if (!Number.isFinite(v)) return min;
@@ -277,6 +278,8 @@ export default function PlanilhaProjeto() {
 
   return (
     <div className="grid gap-6">
+      <BalanceteTabs />
+
       <div className="rounded-3xl border bg-white p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>

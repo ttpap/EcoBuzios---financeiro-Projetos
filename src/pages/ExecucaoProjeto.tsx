@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { ExecucaoLancamentosDialog } from "@/components/execucao/ExecucaoLancamentosDialog";
+import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 
 function buildMonthLabels(monthsCount: number) {
   return Array.from({ length: monthsCount }, (_, i) => ({ idx: i + 1, label: `Mês ${i + 1}` }));
@@ -145,6 +146,8 @@ export default function ExecucaoProjeto() {
 
   return (
     <div className="grid gap-6">
+      <BalanceteTabs />
+
       <div className="rounded-3xl border bg-white p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>

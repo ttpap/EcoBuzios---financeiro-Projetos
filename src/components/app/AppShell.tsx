@@ -9,13 +9,15 @@ import {
   LogOut,
   Settings,
   Table2,
+  ReceiptText,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { to: "/projects", label: "Projetos", icon: FolderKanban },
-  { to: "/balancete", label: "Balancete", icon: Table2 },
+  { to: "/balancete", label: "Balancete PRO", icon: Table2 },
+  { to: "/balancete/execucao", label: "Execução", icon: ReceiptText },
   { to: "/settings", label: "Configurações", icon: Settings },
 ];
 
