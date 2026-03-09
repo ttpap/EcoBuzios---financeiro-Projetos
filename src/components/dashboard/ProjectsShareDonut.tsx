@@ -35,18 +35,24 @@ function buildStops(items: Array<Item & { color: string }>, total: number) {
     const p = pct(it.value, total);
     const start = acc * 100;
     const end = (acc + p) * 100;
-    // Sharp transitions (solid slices)
     parts.push(`${it.color} ${start.toFixed(4)}% ${end.toFixed(4)}%`);
     acc += p;
   }
 
-  // Ensure full circle even with rounding
   if (acc < 1) parts.push(`#E5E7EB ${(acc * 100).toFixed(4)}% 100%`);
 
   return `conic-gradient(${parts.join(", ")})`;
 }
 
-export function ProjectsShareDonut({ items }: { items: Item[] }) {
+export function ProjectsShareDonut({
+  items,
+  title,
+  subtitle,
+}: {
+  items: Item[];
+  title: string;
+  subtitle: string;
+}) {
   const data = useMemo(() => {
     const cleaned = (items ?? []).filter((i) => Number(i.value ?? 0) > 0);
     const sorted = cleaned.slice().sort((a, b) => b.value - a.value);
@@ -71,12 +77,8 @@ export function ProjectsShareDonut({ items }: { items: Item[] }) {
     <Card className="rounded-3xl border bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">
-            Participação por projeto
-          </div>
-          <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-            Percentual do <span className="font-medium text-[hsl(var(--ink))]">total planejado</span> (todos os projetos)
-          </div>
+          <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">{title}</div>
+          <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">{subtitle}</div>
         </div>
 
         <div className="rounded-full bg-[hsl(var(--app-bg))] px-3 py-1 text-xs font-semibold text-[hsl(var(--ink))]">
@@ -86,17 +88,13 @@ export function ProjectsShareDonut({ items }: { items: Item[] }) {
 
       {data.total <= 0 ? (
         <div className="mt-5 rounded-2xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
-          Sem valores planejados. Crie/importa um orçamento em pelo menos um projeto para ver o gráfico.
+          Sem valores para exibir.
         </div>
       ) : (
         <div className="mt-6 grid gap-6 md:grid-cols-[220px_1fr]">
           <div className="flex justify-center md:justify-start">
             <div className="relative h-[200px] w-[200px]">
-              <div
-                className="h-full w-full rounded-full ring-1 ring-black/5"
-                style={{ background: bg }}
-                aria-hidden
-              />
+              <div className="h-full w-full rounded-full ring-1 ring-black/5" style={{ background: bg }} aria-hidden />
               <div className="absolute inset-6 grid place-items-center rounded-full bg-white ring-1 ring-black/5">
                 <div className="text-center">
                   <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total</div>
@@ -112,10 +110,7 @@ export function ProjectsShareDonut({ items }: { items: Item[] }) {
             {data.items.map((it) => {
               const p = pct(it.value, data.total);
               return (
-                <div
-                  key={it.id}
-                  className="flex items-center justify-between gap-3 rounded-2xl border bg-white px-3 py-2"
-                >
+                <div key={it.id} className="flex items-center justify-between gap-3 rounded-2xl border bg-white px-3 py-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ backgroundColor: it.color }} />
                     <div className="min-w-0">

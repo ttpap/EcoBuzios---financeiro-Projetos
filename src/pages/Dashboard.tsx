@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/appStore";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,10 +10,21 @@ import { BarChart3, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ProjectsShareDonut } from "@/components/dashboard/ProjectsShareDonut";
+import { YearTotalsBars } from "@/components/dashboard/YearTotalsBars";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Totals = {
   approved: number;
   executed: number;
+};
+
+type ProjectRollup = {
+  id: string;
+  name: string;
+  executionYear: number | null;
+  planned: number;
+  executed: number;
+  remaining: number;
 };
 
 async function fetchActiveBudget(projectId: string) {
@@ -49,16 +60,16 @@ async function fetchDashboardTotals(projectId: string, budgetId: string): Promis
   return { approved, executed };
 }
 
-async function fetchProjectsPlannedTotals() {
+async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
   const { data: projects, error: pErr } = await supabase
     .from("projects")
-    .select("id,name,created_at,deleted_at")
+    .select("id,name,execution_year,created_at")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (pErr) throw pErr;
 
-  const list = (projects ?? []) as Array<{ id: string; name: string; created_at: string }>;
-  if (!list.length) return [] as Array<{ id: string; name: string; value: number }>;
+  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null }>;
+  if (!list.length) return [];
 
   const projectIds = list.map((p) => p.id);
 
@@ -77,38 +88,108 @@ async function fetchProjectsPlannedTotals() {
   }
 
   const budgetIds = Array.from(latestBudgetByProject.values());
-  if (!budgetIds.length) {
-    return list.map((p) => ({ id: p.id, name: p.name, value: 0 }));
-  }
 
-  const { data: lines, error: lErr } = await supabase
-    .from("budget_lines")
-    .select("budget_id,total_approved,is_subtotal")
-    .in("budget_id", budgetIds);
-  if (lErr) throw lErr;
+  const [linesRes, txRes] = await Promise.all([
+    budgetIds.length
+      ? supabase
+          .from("budget_lines")
+          .select("budget_id,total_approved,is_subtotal")
+          .in("budget_id", budgetIds)
+      : Promise.resolve({ data: [], error: null } as any),
+    budgetIds.length
+      ? supabase
+          .from("transactions")
+          .select("project_id,budget_id,amount")
+          .in("budget_id", budgetIds)
+          .in("project_id", projectIds)
+          .is("deleted_at", null)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  if (linesRes.error) throw linesRes.error;
+  if (txRes.error) throw txRes.error;
 
   const plannedByBudget = new Map<string, number>();
-  for (const r of (lines ?? []) as any[]) {
+  for (const r of (linesRes.data ?? []) as any[]) {
     if (r.is_subtotal) continue;
     const bid = String(r.budget_id);
     plannedByBudget.set(bid, (plannedByBudget.get(bid) ?? 0) + Number(r.total_approved ?? 0));
   }
 
-  const plannedByProject = new Map<string, number>();
-  for (const [pid, bid] of latestBudgetByProject.entries()) {
-    plannedByProject.set(pid, plannedByBudget.get(bid) ?? 0);
+  const executedByProject = new Map<string, number>();
+  for (const t of (txRes.data ?? []) as any[]) {
+    const pid = String(t.project_id);
+    executedByProject.set(pid, (executedByProject.get(pid) ?? 0) + Number(t.amount ?? 0));
   }
 
-  return list.map((p) => ({ id: p.id, name: p.name, value: plannedByProject.get(p.id) ?? 0 }));
+  return list.map((p) => {
+    const bid = latestBudgetByProject.get(p.id) ?? null;
+    const planned = bid ? plannedByBudget.get(bid) ?? 0 : 0;
+    const executed = executedByProject.get(p.id) ?? 0;
+    return {
+      id: p.id,
+      name: p.name,
+      executionYear: p.execution_year ?? null,
+      planned,
+      executed,
+      remaining: planned - executed,
+    };
+  });
 }
 
 export default function Dashboard() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const [yearFilter, setYearFilter] = useState<string>("all");
 
-  const projectsShareQuery = useQuery({
-    queryKey: ["projectsPlannedShare"],
-    queryFn: fetchProjectsPlannedTotals,
+  const rollupQuery = useQuery({
+    queryKey: ["projectsRemainingRollup"],
+    queryFn: fetchProjectsRemainingRollup,
   });
+
+  const yearRows = useMemo(() => {
+    const groups = new Map<string, { value: number; count: number }>();
+    for (const p of rollupQuery.data ?? []) {
+      const y = p.executionYear ? String(p.executionYear) : "Sem ano";
+      const curr = groups.get(y) ?? { value: 0, count: 0 };
+      curr.value += p.remaining;
+      curr.count += 1;
+      groups.set(y, curr);
+    }
+
+    const keys = Array.from(groups.keys()).sort((a, b) => {
+      if (a === "Sem ano") return 1;
+      if (b === "Sem ano") return -1;
+      return Number(b) - Number(a);
+    });
+
+    return keys.map((k) => ({
+      yearLabel: k,
+      value: groups.get(k)!.value,
+      projectsCount: groups.get(k)!.count,
+    }));
+  }, [rollupQuery.data]);
+
+  const yearOptions = useMemo(() => {
+    const years = Array.from(new Set((rollupQuery.data ?? []).map((p) => p.executionYear).filter(Boolean) as number[]))
+      .sort((a, b) => b - a)
+      .map(String);
+    return years;
+  }, [rollupQuery.data]);
+
+  const donutItems = useMemo(() => {
+    const list = rollupQuery.data ?? [];
+    const filtered =
+      yearFilter === "all"
+        ? list
+        : list.filter((p) => String(p.executionYear ?? "Sem ano") === yearFilter);
+
+    return filtered.map((p) => ({ id: p.id, name: p.name, value: Math.max(0, p.remaining) }));
+  }, [rollupQuery.data, yearFilter]);
+
+  const donutSubtitle = useMemo(() => {
+    if (yearFilter === "all") return "Saldo (Planejado − Executado) de cada projeto, considerando todos os anos";
+    return `Saldo (Planejado − Executado) por projeto no ano ${yearFilter}`;
+  }, [yearFilter]);
 
   const projectQuery = useQuery({
     queryKey: ["project", activeProjectId],
@@ -142,13 +223,48 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6">
-      <ProjectsShareDonut items={projectsShareQuery.data ?? []} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <YearTotalsBars rows={yearRows} />
+
+        <div className="grid gap-3">
+          <div className="flex flex-col gap-2 rounded-3xl border bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">Saldo por projeto</div>
+              <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
+                Percentual do saldo dentro do filtro escolhido
+              </div>
+            </div>
+
+            <div className="w-full sm:w-[220px]">
+              <Select value={yearFilter} onValueChange={setYearFilter}>
+                <SelectTrigger className="h-10 rounded-full">
+                  <SelectValue placeholder="Filtrar ano" />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl">
+                  <SelectItem value="all">Todos os anos</SelectItem>
+                  {yearOptions.map((y) => (
+                    <SelectItem key={y} value={y}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <ProjectsShareDonut
+            items={donutItems}
+            title={yearFilter === "all" ? "Participação do saldo por projeto" : `Participação do saldo · ${yearFilter}`}
+            subtitle={donutSubtitle}
+          />
+        </div>
+      </div>
 
       {!activeProjectId ? (
         <div className="rounded-3xl border bg-white p-6">
           <div className="text-sm font-semibold text-[hsl(var(--ink))]">Selecione um projeto</div>
           <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-            Para ver os totais do projeto (aprovado, executado e saldo), selecione um projeto.
+            Para ver os totais do projeto (planejado, executado e saldo), selecione um projeto.
           </p>
           <Button asChild className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]">
             <Link to="/projects">Ir para Projetos</Link>
@@ -167,7 +283,7 @@ export default function Dashboard() {
                   {projectQuery.data?.name ?? "Projeto"}
                 </h1>
                 <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-                  Acompanhe o total aprovado, execução e saldo disponível.
+                  Acompanhe o total planejado, execução e saldo disponível.
                 </p>
               </div>
               <Button asChild variant="outline" className="rounded-full">
@@ -178,7 +294,7 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <Card className="rounded-3xl border bg-white p-5 shadow-sm">
-              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total aprovado</div>
+              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total planejado</div>
               <div className="mt-2 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
                 {formatBRL(stats.approved)}
               </div>
@@ -199,7 +315,7 @@ export default function Dashboard() {
               </div>
             </Card>
             <Card className="rounded-3xl border bg-white p-5 shadow-sm">
-              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Saldo disponível</div>
+              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Saldo (planejado − executado)</div>
               <div
                 className={cn(
                   "mt-2 text-2xl font-semibold tracking-tight",
@@ -215,16 +331,16 @@ export default function Dashboard() {
             <div className="text-sm font-semibold text-[hsl(var(--ink))]">Próximos passos</div>
             <div className="mt-2 grid gap-3 text-sm text-[hsl(var(--muted-ink))] md:grid-cols-3">
               <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4">
-                <div className="font-medium text-[hsl(var(--ink))]">1) Importe o orçamento</div>
-                <div className="mt-1">Excel/CSV → revisão → confirmar.</div>
+                <div className="font-medium text-[hsl(var(--ink))]">1) Monte o orçamento</div>
+                <div className="mt-1">Crie os itens/subitens no Balancete PRO.</div>
               </div>
               <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4">
-                <div className="font-medium text-[hsl(var(--ink))]">2) Use o balancete</div>
-                <div className="mt-1">Aprovado, executado, saldo e % por rubrica.</div>
+                <div className="font-medium text-[hsl(var(--ink))]">2) Lance despesas</div>
+                <div className="mt-1">Registre as despesas por subitem e mês.</div>
               </div>
               <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4">
-                <div className="font-medium text-[hsl(var(--ink))]">3) Lance despesas</div>
-                <div className="mt-1">Débito automático por linha e por mês.</div>
+                <div className="font-medium text-[hsl(var(--ink))]">3) Gere relatórios</div>
+                <div className="mt-1">Exporte PDF/Excel e imprima com diagramação.</div>
               </div>
             </div>
           </div>
