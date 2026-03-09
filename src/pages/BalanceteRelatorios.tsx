@@ -128,7 +128,9 @@ export default function BalanceteRelatorios() {
   }, [txQuery.data]);
 
   const plannedTotal = useMemo(() => {
-    return (linesQuery.data ?? []).filter((l) => !l.is_subtotal).reduce((acc, l) => acc + Number(l.total_approved ?? 0), 0);
+    return (linesQuery.data ?? [])
+      .filter((l) => !l.is_subtotal)
+      .reduce((acc, l) => acc + Number(l.total_approved ?? 0), 0);
   }, [linesQuery.data]);
 
   const executedTotal = useMemo(() => {
@@ -148,34 +150,40 @@ export default function BalanceteRelatorios() {
     }> = [];
 
     for (const cat of categoriesQuery.data ?? []) {
-      rows.push({
-        kind: "item",
-        code: String((cat as any).code),
-        name: cat.name,
-        planned: 0,
-        executed: 0,
-        saldo: 0,
-        pct: 0,
-      });
-
       const lines = (linesQuery.data ?? []).filter((l) => l.category_id === cat.id && !l.is_subtotal);
 
       let plannedCat = 0;
       let executedCat = 0;
 
       for (const l of lines) {
-        const planned = Number(l.total_approved ?? 0);
-        const executed = executedByLine.get(l.id) ?? 0;
-        plannedCat += planned;
-        executedCat += executed;
-        const saldo = planned - executed;
-        const pct = planned > 0 ? executed / planned : 0;
-        rows.push({ kind: "subitem", code: String(l.code ?? ""), name: l.name, planned, executed, saldo, pct });
+        plannedCat += Number(l.total_approved ?? 0);
+        executedCat += executedByLine.get(l.id) ?? 0;
       }
 
       const saldoCat = plannedCat - executedCat;
       const pctCat = plannedCat > 0 ? executedCat / plannedCat : 0;
 
+      // Linha do item (rubrica) já com totais.
+      rows.push({
+        kind: "item",
+        code: String((cat as any).code),
+        name: cat.name,
+        planned: plannedCat,
+        executed: executedCat,
+        saldo: saldoCat,
+        pct: pctCat,
+      });
+
+      // Subitens
+      for (const l of lines) {
+        const planned = Number(l.total_approved ?? 0);
+        const executed = executedByLine.get(l.id) ?? 0;
+        const saldo = planned - executed;
+        const pct = planned > 0 ? executed / planned : 0;
+        rows.push({ kind: "subitem", code: String(l.code ?? ""), name: l.name, planned, executed, saldo, pct });
+      }
+
+      // Linha explícita de total por rubrica (como no exemplo)
       rows.push({
         kind: "total_item",
         code: `Total Rubrica ${String((cat as any).code)}`,
@@ -205,7 +213,9 @@ export default function BalanceteRelatorios() {
   const lancamentosRows = useMemo(() => {
     const list = (txQuery.data ?? [])
       .slice()
-      .sort((a: any, b: any) => String(a.paid_date ?? a.date ?? "").localeCompare(String(b.paid_date ?? b.date ?? "")));
+      .sort((a: any, b: any) =>
+        String(a.paid_date ?? a.date ?? "").localeCompare(String(b.paid_date ?? b.date ?? ""))
+      );
 
     return list.map((t: any) => {
       const line = lineById.get(String(t.budget_line_id));
@@ -248,20 +258,15 @@ export default function BalanceteRelatorios() {
     );
 
     const body = rubricasRows.map((r) => {
-      const isItem = r.kind === "item";
       const isSub = r.kind === "subitem";
-      const isTotalItem = r.kind === "total_item";
-      const isTotalProject = r.kind === "total_project";
-
       const name = isSub ? `  ${r.name}` : r.name;
-
       return [
         r.code,
         name,
-        isItem ? "" : formatBRL(r.planned),
-        isItem ? "" : formatBRL(r.executed),
-        isItem ? "" : formatBRL(r.saldo),
-        isItem ? "" : `${Math.round(r.pct * 100)}%`,
+        formatBRL(r.planned),
+        formatBRL(r.executed),
+        formatBRL(r.saldo),
+        `${Math.round(r.pct * 100)}%`,
       ];
     });
 
@@ -293,6 +298,7 @@ export default function BalanceteRelatorios() {
           data.cell.styles.textColor = [255, 255, 255];
           data.cell.styles.fontStyle = "bold";
         }
+
       },
     });
 
@@ -351,10 +357,10 @@ export default function BalanceteRelatorios() {
     const rows = rubricasRows.map((r) => ({
       Codigo: r.code,
       "Item/Subitem": r.name,
-      Planejado: r.kind === "item" ? "" : r.planned,
-      Executado: r.kind === "item" ? "" : r.executed,
-      Saldo: r.kind === "item" ? "" : r.saldo,
-      "% Executado": r.kind === "item" ? "" : formatPercent(r.pct),
+      Planejado: r.planned,
+      Executado: r.executed,
+      Saldo: r.saldo,
+      "% Executado": formatPercent(r.pct),
     }));
 
     downloadXlsxWithSheets("relatorio-rubricas.xlsx", [
@@ -607,7 +613,6 @@ export default function BalanceteRelatorios() {
                         key={`${r.kind}-${r.code}-${idx}`}
                         className={cn(
                           r.kind === "item" ? "bg-black/[0.03]" : "",
-                          r.kind === "total_item" ? "bg-[hsl(var(--brand)/0.08)]" : "",
                           r.kind === "total_project" ? "bg-[hsl(var(--ink))] text-white" : ""
                         )}
                       >
@@ -627,17 +632,37 @@ export default function BalanceteRelatorios() {
                         >
                           {r.name}
                         </TableCell>
-                        <TableCell className={cn("text-right font-semibold", r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]")}>
-                          {r.kind === "item" ? "" : formatBRL(r.planned)}
+                        <TableCell
+                          className={cn(
+                            "text-right font-semibold",
+                            r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {formatBRL(r.planned)}
                         </TableCell>
-                        <TableCell className={cn("text-right font-semibold", r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]")}>
-                          {r.kind === "item" ? "" : formatBRL(r.executed)}
+                        <TableCell
+                          className={cn(
+                            "text-right font-semibold",
+                            r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {formatBRL(r.executed)}
                         </TableCell>
-                        <TableCell className={cn("text-right font-semibold", r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]")}>
-                          {r.kind === "item" ? "" : formatBRL(r.saldo)}
+                        <TableCell
+                          className={cn(
+                            "text-right font-semibold",
+                            r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {formatBRL(r.saldo)}
                         </TableCell>
-                        <TableCell className={cn("text-right font-semibold", r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]")}>
-                          {r.kind === "item" ? "" : `${Math.round(r.pct * 100)}%`}
+                        <TableCell
+                          className={cn(
+                            "text-right font-semibold",
+                            r.kind === "total_project" ? "text-white" : "text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {`${Math.round(r.pct * 100)}%`}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -710,7 +735,10 @@ export default function BalanceteRelatorios() {
 
               <div className="mt-4 grid gap-2">
                 {notasDisponiveis.map((n, idx) => (
-                  <div key={`${n.invoice_path}-${idx}`} className="flex items-center justify-between rounded-2xl border bg-[hsl(var(--app-bg))] p-3">
+                  <div
+                    key={`${n.invoice_path}-${idx}`}
+                    className="flex items-center justify-between rounded-2xl border bg-[hsl(var(--app-bg))] p-3"
+                  >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-[hsl(var(--ink))]">{n.invoice_file_name}</div>
                       <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">Data NF: {formatDateBR(n.due_date)}</div>
