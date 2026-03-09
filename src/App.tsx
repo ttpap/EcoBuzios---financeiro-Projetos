@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
 import ImportBudget from "@/pages/ImportBudget";
 import ImportConferencia from "@/pages/ImportConferencia";
+import MontarPlanilha from "@/pages/MontarPlanilha";
 import Balancete from "@/pages/Balancete";
 import BalanceteLinha from "@/pages/BalanceteLinha";
 import Lancamentos from "@/pages/Lancamentos";
@@ -48,6 +49,7 @@ const App = () => (
             {/* Módulo Balancete */}
             <Route path="/balancete" element={<AuthedLayout><Balancete /></AuthedLayout>} />
             <Route path="/balancete/importar" element={<AuthedLayout><ImportBudget /></AuthedLayout>} />
+            <Route path="/balancete/montar" element={<AuthedLayout><MontarPlanilha /></AuthedLayout>} />
             <Route path="/balancete/importar/:id" element={<AuthedLayout><ImportConferencia /></AuthedLayout>} />
             <Route path="/balancete/lancamentos" element={<AuthedLayout><BalanceteLancamentos /></AuthedLayout>} />
             <Route path="/balancete/relatorios" element={<AuthedLayout><BalanceteRelatorios /></AuthedLayout>} />

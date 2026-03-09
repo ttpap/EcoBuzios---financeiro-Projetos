@@ -10,10 +10,17 @@ import { buildProjectStoragePath, safeFileExt } from "@/lib/fileUtils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatBRL } from "@/lib/money";
 import { toast } from "sonner";
-import { FileUp, Wand2 } from "lucide-react";
+import { FileUp, Wand2, LayoutPanelTop } from "lucide-react";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 
 type ParseOutput =
@@ -60,7 +67,7 @@ export default function ImportBudget() {
       if (ext === "png" || ext === "jpg" || ext === "jpeg") {
         return {
           kind: "image",
-          note: "Imagem detectada. A leitura inteligente via OCR entra na próxima etapa (Etapa 3).",
+          note: "Imagem detectada. Clique em Enviar para interpretação com IA (Gemini) e conferência.",
         } as const;
       }
 
@@ -73,7 +80,7 @@ export default function ImportBudget() {
         setMonthsCount(res.parsed.monthsCount || 12);
         toast.success("Planilha interpretada. Revise e confirme.");
       } else if (res.kind === "pdf") {
-        toast.success("PDF lido. Vamos usar isso como prévia e evoluir para extração de tabela/OCR.");
+        toast.success("PDF lido. Clique em Enviar para interpretação com IA (Gemini) e conferência.");
       } else {
         toast.message("Imagem recebida", { description: res.note });
       }
@@ -95,6 +102,41 @@ export default function ImportBudget() {
         .upload(storagePath, file, { upsert: true, contentType: file.type || undefined });
       if (upErr) throw upErr;
 
+      let parsedBudgetJson: any = null;
+      let extractedRawJson: any = null;
+
+      if (parseOut?.kind === "budget") {
+        parsedBudgetJson = parseOut.parsed;
+      } else if (parseOut?.kind === "pdf") {
+        extractedRawJson = { kind: "pdf", text: parseOut.text.slice(0, 20000) };
+
+        const { data, error } = await supabase.functions.invoke("gemini-parse-budget", {
+          body: {
+            fileName: file.name,
+            mimeType: file.type || ext,
+            extractedText: parseOut.text,
+            hintMonths: monthsCount,
+          },
+        });
+        if (error) throw error;
+        parsedBudgetJson = (data as any)?.parsed ?? null;
+      } else if (parseOut?.kind === "image") {
+        extractedRawJson = { kind: "image" };
+
+        // Para imagem, sem OCR local por enquanto; enviamos apenas metadados para IA.
+        // A etapa seguinte pode incluir OCR e anexar texto extraído.
+        const { data, error } = await supabase.functions.invoke("gemini-parse-budget", {
+          body: {
+            fileName: file.name,
+            mimeType: file.type || ext,
+            extractedText: `Arquivo de imagem enviado: ${file.name}. Interprete a estrutura a partir de um layout típico de planilha e descreva o que conseguir inferir.`,
+            hintMonths: monthsCount,
+          },
+        });
+        if (error) throw error;
+        parsedBudgetJson = (data as any)?.parsed ?? null;
+      }
+
       // Cria importação em modo conferência
       const { data: oi, error: oiErr } = await supabase
         .from("orcamentos_importados")
@@ -105,13 +147,8 @@ export default function ImportBudget() {
           arquivo_path: storagePath,
           arquivo_url: null,
           status_importacao: "review",
-          extracted_raw_json:
-            parseOut?.kind === "pdf"
-              ? { kind: "pdf", text: parseOut.text.slice(0, 20000) }
-              : parseOut?.kind === "image"
-                ? { kind: "image" }
-                : null,
-          parsed_budget_json: parseOut?.kind === "budget" ? parseOut.parsed : null,
+          extracted_raw_json: extractedRawJson,
+          parsed_budget_json: parsedBudgetJson,
           erros_json: null,
         })
         .select("*")
@@ -211,6 +248,16 @@ export default function ImportBudget() {
               Próximo passo: conferência (corrigir rubricas/valores) antes de confirmar.
             </p>
           </div>
+
+          <Button
+            asChild
+            className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+          >
+            <Link to="/balancete/montar">
+              <LayoutPanelTop className="mr-2 h-4 w-4" />
+              Montar Planilha
+            </Link>
+          </Button>
         </div>
       </div>
 
