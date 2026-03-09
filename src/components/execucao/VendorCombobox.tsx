@@ -8,39 +8,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Check, Plus, Search } from "lucide-react";
-
-export type Vendor = {
-  id: string;
-  project_id: string;
-  name: string;
-  tax_id: string;
-  address: string | null;
-  phone: string | null;
-  email: string | null;
-};
+import { useSession } from "@/context/SessionContext";
+import type { Vendor } from "@/lib/supabaseTypes";
 
 export function VendorCombobox({
-  projectId,
   value,
   onChange,
 }: {
-  projectId: string;
   value: Vendor | null;
   onChange: (v: Vendor | null) => void;
 }) {
+  const { session } = useSession();
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
 
   const vendorsQuery = useQuery({
-    queryKey: ["vendors", projectId],
-    enabled: Boolean(projectId),
+    queryKey: ["vendors", session?.user?.id],
+    enabled: Boolean(session?.user?.id),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vendors")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.from("vendors").select("*").order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as Vendor[];
     },
@@ -56,16 +43,19 @@ export function VendorCombobox({
 
   const createVendor = useMutation({
     mutationFn: async (payload: { name: string; tax_id: string; address?: string; phone?: string; email?: string }) => {
+      const owner = session?.user?.id;
+      if (!owner) throw new Error("Sem sessão");
+
       const { data, error } = await supabase
         .from("vendors")
         .insert({
-          project_id: projectId,
+          owner_user_id: owner,
           name: payload.name.trim(),
           tax_id: payload.tax_id.trim(),
           address: payload.address?.trim() || null,
           phone: payload.phone?.trim() || null,
           email: payload.email?.trim() || null,
-        })
+        } as any)
         .select("*")
         .single();
       if (error) throw error;
@@ -73,9 +63,15 @@ export function VendorCombobox({
     },
     onSuccess: (v) => {
       toast.success("Fornecedor cadastrado");
-      queryClient.invalidateQueries({ queryKey: ["vendors", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["vendors", session?.user?.id] });
       onChange(v);
       setOpen(false);
+      setCreateOpen(false);
+      setName("");
+      setTaxId("");
+      setAddress("");
+      setPhone("");
+      setEmail("");
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao cadastrar"),
   });
@@ -96,7 +92,11 @@ export function VendorCombobox({
           className="h-10 flex-1 justify-between rounded-2xl"
           onClick={() => setOpen((o) => !o)}
         >
-          <span className={cn("truncate text-sm", value ? "text-[hsl(var(--ink))]" : "text-[hsl(var(--muted-ink))]")}
+          <span
+            className={cn(
+              "truncate text-sm",
+              value ? "text-[hsl(var(--ink))]" : "text-[hsl(var(--muted-ink))]"
+            )}
           >
             {value ? `${value.name} · ${value.tax_id}` : "Selecionar fornecedor"}
           </span>
@@ -105,7 +105,10 @@ export function VendorCombobox({
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button type="button" className="h-10 rounded-2xl bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]">
+            <Button
+              type="button"
+              className="h-10 rounded-2xl bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+            >
               <Plus className="mr-2 h-4 w-4" />
               Novo
             </Button>

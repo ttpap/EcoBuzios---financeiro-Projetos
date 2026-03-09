@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { BudgetLine, Transaction } from "@/lib/supabaseTypes";
+import type { BudgetLine, Transaction, Vendor } from "@/lib/supabaseTypes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
-import { VendorCombobox, type Vendor } from "@/components/execucao/VendorCombobox";
+import { VendorCombobox } from "@/components/execucao/VendorCombobox";
 import { cn } from "@/lib/utils";
 import { PDFDocument } from "pdf-lib";
 import { Download, FileUp, Trash2, Eye, Pencil, X } from "lucide-react";
@@ -31,6 +31,12 @@ function safeFileName(name: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 120);
+}
+
+function monthRefFromIndex(index1: number) {
+  const base = new Date(Date.UTC(2000, 0, 1));
+  const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + (index1 - 1), 1));
+  return d.toISOString().slice(0, 10);
 }
 
 async function compressPdf(file: File): Promise<Uint8Array> {
@@ -50,6 +56,12 @@ function downloadBlobUrl(url: string, fileName: string) {
   a.remove();
 }
 
+async function fetchVendorById(vendorId: string): Promise<Vendor | null> {
+  const { data, error } = await supabase.from("vendors").select("*").eq("id", vendorId).single();
+  if (error) return null;
+  return (data as Vendor) ?? null;
+}
+
 export function ExecucaoLancamentosDialog({
   open,
   onOpenChange,
@@ -57,7 +69,7 @@ export function ExecucaoLancamentosDialog({
   budgetId,
   line,
   monthIndex,
-  monthRef,
+  monthsCount,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -65,9 +77,12 @@ export function ExecucaoLancamentosDialog({
   budgetId: string;
   line: BudgetLine | null;
   monthIndex: number;
-  monthRef: string;
+  monthsCount: number;
 }) {
   const queryClient = useQueryClient();
+
+  const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(monthIndex);
+  const monthRef = useMemo(() => monthRefFromIndex(currentMonthIndex), [currentMonthIndex]);
 
   const txQuery = useQuery({
     queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef],
@@ -101,9 +116,11 @@ export function ExecucaoLancamentosDialog({
   const [file, setFile] = useState<File | null>(null);
 
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [editingMonthIndex, setEditingMonthIndex] = useState<number>(monthIndex);
 
   useEffect(() => {
     if (!open) {
+      setCurrentMonthIndex(monthIndex);
       setEditing(null);
       setVendor(null);
       setPaymentMethod("");
@@ -113,8 +130,11 @@ export function ExecucaoLancamentosDialog({
       setAmount("");
       setNotes("");
       setFile(null);
+      setEditingMonthIndex(monthIndex);
       return;
     }
+
+    setCurrentMonthIndex(monthIndex);
 
     // Ao abrir, se tiver apenas 1 lançamento, já deixa pronto para editar.
     const list = txQuery.data ?? [];
@@ -127,11 +147,17 @@ export function ExecucaoLancamentosDialog({
       setPaidDate(t.paid_date || "");
       setAmount(String(t.amount ?? 0).replace(".", ","));
       setNotes(t.notes || "");
-      // Vendor: nesta versão, o usuário re-seleciona (combobox carrega por projeto)
-      setVendor(null);
+      setEditingMonthIndex(Number(t.month_index ?? monthIndex));
       setFile(null);
+
+      const vendorId = String(t.vendor_id || "");
+      if (vendorId) {
+        fetchVendorById(vendorId).then((v) => v && setVendor(v));
+      } else {
+        setVendor(null);
+      }
     }
-  }, [open, txQuery.data]);
+  }, [open, txQuery.data, monthIndex]);
 
   const signedUrl = useMutation({
     mutationFn: async (path: string) => {
@@ -187,7 +213,7 @@ export function ExecucaoLancamentosDialog({
           budget_id: budgetId,
           budget_line_id: line.id,
           date: paidDate,
-          month_ref: monthRef,
+          month_index: currentMonthIndex,
           amount: parsedAmount,
           description: line.name,
           document_number: documentNumber.trim() || null,
@@ -218,7 +244,7 @@ export function ExecucaoLancamentosDialog({
       setNotes("");
       setFile(null);
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
-      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
   });
@@ -260,6 +286,8 @@ export function ExecucaoLancamentosDialog({
         }
       }
 
+      const oldMonthIndex = Number((editing as any).month_index ?? currentMonthIndex);
+
       const { data, error } = await supabase
         .from("transactions")
         .update({
@@ -271,6 +299,7 @@ export function ExecucaoLancamentosDialog({
           date: paidDate,
           amount: parsedAmount,
           notes: notes.trim() || null,
+          month_index: editingMonthIndex,
           ...(invoice_path !== undefined
             ? { invoice_path, invoice_file_name, invoice_size_bytes }
             : {}),
@@ -279,14 +308,26 @@ export function ExecucaoLancamentosDialog({
         .select("*")
         .single();
       if (error) throw error;
-      return data as Transaction;
+
+      return { tx: data as Transaction, oldMonthIndex };
     },
-    onSuccess: () => {
-      toast.success("Lançamento atualizado");
+    onSuccess: ({ tx, oldMonthIndex }) => {
+      const newMonthIndex = Number((tx as any).month_index ?? editingMonthIndex);
+
+      toast.success(
+        newMonthIndex !== oldMonthIndex
+          ? `Lançamento movido para Mês ${newMonthIndex}`
+          : "Lançamento atualizado"
+      );
+
       setEditing(null);
       setFile(null);
+
+      // Se o mês mudou, navega o modal para o novo mês automaticamente.
+      if (newMonthIndex !== currentMonthIndex) setCurrentMonthIndex(newMonthIndex);
+
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
-      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar"),
   });
@@ -303,7 +344,7 @@ export function ExecucaoLancamentosDialog({
     onSuccess: () => {
       toast.success("Lançamento removido");
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
-      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
   });
@@ -316,7 +357,7 @@ export function ExecucaoLancamentosDialog({
         <DialogContent className="max-w-3xl rounded-3xl">
           <DialogHeader>
             <DialogTitle>
-              Lançamentos — {line?.code || ""} {line?.name || ""} · Mês {monthIndex}
+              Lançamentos — {line?.code || ""} {line?.name || ""} · Mês {currentMonthIndex}
             </DialogTitle>
           </DialogHeader>
 
@@ -346,6 +387,7 @@ export function ExecucaoLancamentosDialog({
                       setAmount("");
                       setNotes("");
                       setFile(null);
+                      setEditingMonthIndex(currentMonthIndex);
                     }}
                   >
                     <X className="mr-2 h-4 w-4" />
@@ -355,9 +397,30 @@ export function ExecucaoLancamentosDialog({
               )}
 
               <div className="mt-4 grid gap-3">
+                {editing && (
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Mês do lançamento</div>
+                    <Select
+                      value={String(editingMonthIndex)}
+                      onValueChange={(v) => setEditingMonthIndex(Number(v))}
+                    >
+                      <SelectTrigger className="rounded-2xl">
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: monthsCount }, (_, i) => i + 1).map((m) => (
+                          <SelectItem key={m} value={String(m)}>
+                            Mês {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Fornecedor / Credor</div>
-                  <VendorCombobox projectId={projectId} value={vendor} onChange={setVendor} />
+                  <VendorCombobox value={vendor} onChange={setVendor} />
                 </div>
 
                 <div>
@@ -479,8 +542,15 @@ export function ExecucaoLancamentosDialog({
                             setPaidDate(t.paid_date || "");
                             setAmount(String(t.amount ?? 0).replace(".", ","));
                             setNotes(t.notes || "");
-                            setVendor(null);
+                            setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
                             setFile(null);
+
+                            const vendorId = String(t.vendor_id || "");
+                            if (vendorId) {
+                              fetchVendorById(vendorId).then((v) => v && setVendor(v));
+                            } else {
+                              setVendor(null);
+                            }
                           }}
                         >
                           <Pencil className="mr-2 h-4 w-4" />
@@ -519,9 +589,7 @@ export function ExecucaoLancamentosDialog({
                       </div>
 
                       {!t.invoice_path && (
-                        <div className="mt-2 text-xs font-medium text-red-700">
-                          Sem PDF anexado.
-                        </div>
+                        <div className="mt-2 text-xs font-medium text-red-700">Sem PDF anexado.</div>
                       )}
                     </div>
                     <Button

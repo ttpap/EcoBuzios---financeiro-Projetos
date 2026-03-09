@@ -13,6 +13,7 @@ import ImportConferencia from "@/pages/ImportConferencia";
 import MontarPlanilha from "@/pages/MontarPlanilha";
 import PlanilhaProjeto from "@/pages/PlanilhaProjeto";
 import ExecucaoProjeto from "@/pages/ExecucaoProjeto";
+import Fornecedores from "@/pages/Fornecedores";
 import BalanceteLinha from "@/pages/BalanceteLinha";
 import Lancamentos from "@/pages/Lancamentos";
 import Relatorios from "@/pages/Relatorios";
@@ -46,6 +47,7 @@ const App = () => (
 
             <Route path="/dashboard" element={<AuthedLayout><Dashboard /></AuthedLayout>} />
             <Route path="/projects" element={<AuthedLayout><Projects /></AuthedLayout>} />
+            <Route path="/fornecedores" element={<AuthedLayout><Fornecedores /></AuthedLayout>} />
 
             {/* Módulo Balancete */}
             <Route path="/balancete" element={<AuthedLayout><PlanilhaProjeto /></AuthedLayout>} />

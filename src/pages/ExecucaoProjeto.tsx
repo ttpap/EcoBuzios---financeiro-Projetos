@@ -258,72 +258,57 @@ export default function ExecucaoProjeto() {
                       {monthCols.map((m) => (
                         <TableCell key={m.idx} />
                       ))}
-                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
-                        {formatBRL(item.planned)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
-                        {formatBRL(item.executed)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(item.planned)}</TableCell>
+                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(item.executed)}</TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-semibold",
+                          item.planned - item.executed < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                        )}
+                      >
                         {formatBRL(item.planned - item.executed)}
                       </TableCell>
                     </TableRow>
 
                     {lines.map((l) => {
+                      if (l.is_subtotal) return null;
                       const totals = lineTotals.get(l.id) ?? { planned: 0, executed: 0 };
                       const saldoLine = totals.planned - totals.executed;
 
                       return (
                         <TableRow key={l.id}>
-                          <TableCell className="text-sm text-[hsl(var(--muted-ink))]">{l.code || ""}</TableCell>
-                          <TableCell className="text-sm font-medium text-[hsl(var(--ink))]">{l.name}</TableCell>
+                          <TableCell className="font-medium text-[hsl(var(--ink))]">{l.code}</TableCell>
+                          <TableCell className="text-[hsl(var(--ink))]">{l.name}</TableCell>
 
                           {monthCols.map((m) => {
                             const mk = monthRefFromIndex(m.idx);
-                            const key = `${l.id}__${mk}`;
-                            const planned = plannedAgg.byLineMonth.get(key) ?? 0;
-                            const executed = executedAgg.byLineMonth.get(key) ?? 0;
+                            const planned = plannedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
+                            const executed = executedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
                             const remaining = planned - executed;
+                            const hasTx = executed !== 0;
+                            const missingPdf = executedAgg.missingInvoice.has(`${l.id}__${mk}`);
 
-                            const showValue = executed === 0 ? planned : remaining;
-                            const isOver = executed > planned && planned > 0;
-                            const isPartial = executed > 0 && executed < planned;
-                            const isExact = planned > 0 && executed === planned;
-                            const isUnplannedSpend = planned === 0 && executed > 0;
-                            const needsPdf = executed > 0 && executedAgg.missingInvoice.has(key);
-
-                            const bg = isUnplannedSpend || isOver
-                              ? "bg-red-50"
-                              : isExact
-                                ? "bg-emerald-50"
-                                : isPartial
-                                  ? "bg-amber-50"
-                                  : planned
-                                    ? "bg-[hsl(var(--brand)/0.10)]"
-                                    : "";
-
-                            const fg = isUnplannedSpend || isOver
-                              ? "text-red-700"
-                              : isExact
-                                ? "text-emerald-700"
-                                : isPartial
-                                  ? "text-amber-800"
-                                  : planned
-                                    ? "text-[hsl(var(--ink))]"
-                                    : "text-[hsl(var(--muted-ink))]";
+                            const display = hasTx ? remaining : planned;
 
                             return (
                               <TableCell key={m.idx} className="text-right">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <button
+                                      type="button"
                                       className={cn(
-                                        "w-full rounded-xl px-2 py-1 text-sm transition",
-                                        bg,
+                                        "w-full rounded-xl px-2 py-1 text-right text-sm font-semibold transition",
                                         "hover:bg-black/5",
-                                        fg,
-                                        (planned || executed) ? "font-semibold" : "",
-                                        needsPdf ? "ring-1 ring-red-500" : ""
+                                        hasTx
+                                          ? remaining < 0
+                                            ? "text-red-700"
+                                            : remaining === 0
+                                              ? "text-emerald-700"
+                                              : "text-[hsl(var(--brand-strong))]"
+                                          : planned
+                                            ? "text-[hsl(var(--ink))]"
+                                            : "text-[hsl(var(--muted-ink))]",
+                                        missingPdf ? "ring-2 ring-red-500/70" : ""
                                       )}
                                       onClick={() => {
                                         setSelectedLine(l);
@@ -331,26 +316,23 @@ export default function ExecucaoProjeto() {
                                         setOpen(true);
                                       }}
                                     >
-                                      {formatBRL(showValue)}
+                                      {formatBRL(display)}
                                     </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-[280px]">
-                                    <div className="grid gap-1 text-xs">
+                                  <TooltipContent className="max-w-xs">
+                                    <div className="text-xs">
                                       <div>
-                                        <span className="text-[hsl(var(--muted-ink))]">Planejado:</span>{" "}
-                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(planned)}</span>
+                                        Planejado: <span className="font-semibold">{formatBRL(planned)}</span>
                                       </div>
                                       <div>
-                                        <span className="text-[hsl(var(--muted-ink))]">Executado:</span>{" "}
-                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(executed)}</span>
+                                        Executado: <span className="font-semibold">{formatBRL(executed)}</span>
                                       </div>
                                       <div>
-                                        <span className="text-[hsl(var(--muted-ink))]">Saldo:</span>{" "}
-                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(remaining)}</span>
+                                        Saldo: <span className="font-semibold">{formatBRL(remaining)}</span>
                                       </div>
-                                      {needsPdf && (
-                                        <div className="pt-1 text-red-700">
-                                          Há lançamento(s) sem PDF anexado.
+                                      {missingPdf && (
+                                        <div className="mt-2 font-semibold text-red-700">
+                                          Atenção: há lançamento sem PDF.
                                         </div>
                                       )}
                                     </div>
@@ -418,7 +400,7 @@ export default function ExecucaoProjeto() {
         budgetId={budgetQuery.data.id}
         line={selectedLine}
         monthIndex={selectedMonth}
-        monthRef={monthRefFromIndex(selectedMonth)}
+        monthsCount={monthsCount}
       />
     </div>
   );

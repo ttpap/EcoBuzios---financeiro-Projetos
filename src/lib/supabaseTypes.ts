@@ -49,6 +49,17 @@ export type BudgetLine = {
   sort_order: number;
 };
 
+export type Vendor = {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  tax_id: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  created_at: string;
+};
+
 export type Transaction = {
   id: string;
   project_id: string;
@@ -56,6 +67,7 @@ export type Transaction = {
   budget_line_id: string;
   date: string;
   month_ref: string;
+  month_index: number;
   amount: number;
   description: string | null;
   expense_type: string | null;
