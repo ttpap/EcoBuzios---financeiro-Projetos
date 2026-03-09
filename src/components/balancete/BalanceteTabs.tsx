@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 const tabs = [
   { to: "/balancete", label: "Balancete PRO" },
   { to: "/balancete/execucao", label: "Execução" },
+  { to: "/balancete/relatorios", label: "Relatórios" },
 ];
 
 export function BalanceteTabs() {
