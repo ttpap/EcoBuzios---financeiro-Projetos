@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppStore } from "@/lib/appStore";
-import type { Budget, BudgetCategory, BudgetLine, Transaction, Vendor } from "@/lib/supabaseTypes";
+import type { Budget, BudgetCategory, BudgetLine, Project, Transaction, Vendor } from "@/lib/supabaseTypes";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,16 @@ export default function BalanceteRelatorios() {
   const printRef = useRef<HTMLDivElement | null>(null);
 
   const [report, setReport] = useState<"rubricas" | "lancamentos" | "notas">("rubricas");
+
+  const projectQuery = useQuery({
+    queryKey: ["project", activeProjectId],
+    enabled: Boolean(activeProjectId),
+    queryFn: async () => {
+      const { data, error } = await supabase.from("projects").select("*").eq("id", activeProjectId).single();
+      if (error) throw error;
+      return data as Project;
+    },
+  });
 
   const budgetQuery = useQuery({
     queryKey: ["budget", activeProjectId],
@@ -592,6 +602,7 @@ export default function BalanceteRelatorios() {
               title="Relatório de Rubricas (Planejado x Executado)"
               planned={plannedTotal}
               executed={executedTotal}
+              project={projectQuery.data}
             />
 
             <Card className="rounded-3xl border bg-white p-0 shadow-sm">
@@ -675,7 +686,7 @@ export default function BalanceteRelatorios() {
 
         {report === "lancamentos" && (
           <>
-            <ReportHeader title="Relatório de Lançamentos" planned={plannedTotal} executed={executedTotal} />
+            <ReportHeader title="Relatório de Lançamentos" planned={plannedTotal} executed={executedTotal} project={projectQuery.data} />
 
             <Card className="rounded-3xl border bg-white p-0 shadow-sm">
               <div className="overflow-auto">
@@ -725,7 +736,7 @@ export default function BalanceteRelatorios() {
 
         {report === "notas" && (
           <>
-            <ReportHeader title="Relatório de Notas Fiscais" planned={plannedTotal} executed={executedTotal} />
+            <ReportHeader title="Relatório de Notas Fiscais" planned={plannedTotal} executed={executedTotal} project={projectQuery.data} />
 
             <Card className="rounded-3xl border bg-white p-6 shadow-sm">
               <div className="text-sm font-semibold text-[hsl(var(--ink))]">Notas anexadas</div>

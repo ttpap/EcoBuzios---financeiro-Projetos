@@ -4,6 +4,7 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/context/SessionContext";
+import ecoLogo from "@/assets/ecobuzios-logo.png";
 
 export default function Login() {
   const { session } = useSession();
@@ -17,36 +18,36 @@ export default function Login() {
     <div className="min-h-screen bg-[hsl(var(--app-bg))]">
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-8 px-4 py-10 md:grid-cols-2 md:items-center md:px-6">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[hsl(var(--muted-ink))] backdrop-blur">
-            Controle orçamentário por rubrica
+          <img
+            src={ecoLogo}
+            alt="EcoBúzios"
+            className="h-16 w-auto"
+          />
+
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-[hsl(var(--muted-ink))] backdrop-blur">
+            Gestão financeira por rubrica
           </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[hsl(var(--ink))] md:text-4xl">
-            Entre para gerenciar seu balancete
+            Acesse para gerir seu projeto
           </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-[hsl(var(--muted-ink))]">
-            Importe planilhas, revise a estrutura, lance despesas por mês e acompanhe
-            saldos em tempo real.
+            Planeje o orçamento por rubricas, registre pagamentos reais e acompanhe o saldo por mês com clareza.
           </p>
 
           <div className="mt-6 overflow-hidden rounded-3xl border bg-white p-5 shadow-sm">
             <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">
-              Dica
+              Dica rápida
             </div>
             <div className="mt-1 text-sm text-[hsl(var(--ink))]">
-              Para o MVP, comece importando um Excel/CSV. OCR (imagem/PDF) entra na
-              próxima etapa.
+              Comece criando o Balancete PRO e depois lance a Execução mês a mês, anexando as notas fiscais em PDF.
             </div>
           </div>
         </div>
 
         <div className="rounded-3xl border bg-white p-6 shadow-sm">
           <div className="mb-4">
-            <div className="text-sm font-semibold text-[hsl(var(--ink))]">
-              Acesso
-            </div>
-            <div className="text-xs text-[hsl(var(--muted-ink))]">
-              E-mail e senha (Supabase Auth)
-            </div>
+            <div className="text-sm font-semibold text-[hsl(var(--ink))]">Acesso</div>
+            <div className="text-xs text-[hsl(var(--muted-ink))]">E-mail e senha (Supabase Auth)</div>
           </div>
           <Auth
             supabaseClient={supabase}

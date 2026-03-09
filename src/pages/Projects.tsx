@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { FolderKanban, Plus, Trash2, Table2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { ProjectLogoUploader } from "@/components/projects/ProjectLogoUploader";
 
 export default function Projects() {
   const { session } = useSession();
@@ -200,6 +201,10 @@ export default function Projects() {
                 {p.description ? (
                   <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">{p.description}</div>
                 ) : null}
+
+                <div className="mt-4">
+                  <ProjectLogoUploader project={p as any} />
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 <Button

@@ -11,6 +11,10 @@ export type Project = {
   currency: string;
   status: string;
   created_at: string;
+
+  logo_file_name?: string | null;
+  logo_path?: string | null;
+  logo_size_bytes?: number | null;
 };
 
 export type Budget = {
