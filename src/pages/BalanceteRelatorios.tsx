@@ -522,8 +522,8 @@ export default function BalanceteRelatorios() {
     <div className="grid gap-6">
       <BalanceteTabs />
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:gap-3">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button
             variant={report === "rubricas" ? "default" : "outline"}
             className={cn(
@@ -534,7 +534,8 @@ export default function BalanceteRelatorios() {
             )}
             onClick={() => setReport("rubricas")}
           >
-            Relatório de Rubricas
+            <span className="sm:hidden">Rubricas</span>
+            <span className="hidden sm:inline">Relatório de Rubricas</span>
           </Button>
           <Button
             variant={report === "lancamentos" ? "default" : "outline"}
@@ -546,7 +547,8 @@ export default function BalanceteRelatorios() {
             )}
             onClick={() => setReport("lancamentos")}
           >
-            Relatório de Lançamentos
+            <span className="sm:hidden">Lançamentos</span>
+            <span className="hidden sm:inline">Relatório de Lançamentos</span>
           </Button>
           <Button
             variant={report === "notas" ? "default" : "outline"}
@@ -556,24 +558,25 @@ export default function BalanceteRelatorios() {
             )}
             onClick={() => setReport("notas")}
           >
-            Relatório de Notas Fiscais
+            <span className="sm:hidden">Notas</span>
+            <span className="hidden sm:inline">Relatório de Notas Fiscais</span>
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 md:ml-auto">
           {report === "rubricas" && (
             <>
               <Button variant="outline" className="rounded-full" onClick={exportRubricasPdf}>
-                <FileText className="mr-2 h-4 w-4" />
-                PDF
+                <FileText className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">PDF</span>
               </Button>
               <Button variant="outline" className="rounded-full" onClick={exportRubricasXlsx}>
-                <Download className="mr-2 h-4 w-4" />
-                Excel
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Excel</span>
               </Button>
               <Button variant="outline" className="rounded-full" onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
+                <Printer className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Imprimir</span>
               </Button>
             </>
           )}
@@ -581,25 +584,30 @@ export default function BalanceteRelatorios() {
           {report === "lancamentos" && (
             <>
               <Button variant="outline" className="rounded-full" onClick={exportLancamentosPdf}>
-                <FileText className="mr-2 h-4 w-4" />
-                PDF
+                <FileText className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">PDF</span>
               </Button>
               <Button variant="outline" className="rounded-full" onClick={exportLancamentosXlsx}>
-                <Download className="mr-2 h-4 w-4" />
-                Excel
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Excel</span>
               </Button>
               <Button variant="outline" className="rounded-full" onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
+                <Printer className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Imprimir</span>
               </Button>
             </>
           )}
 
           {report === "notas" && (
             <>
-              <Button variant="outline" className="rounded-full" onClick={mergeInvoicesPdf} disabled={!notasDisponiveis.length}>
-                <FileText className="mr-2 h-4 w-4" />
-                Visualizar
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={mergeInvoicesPdf}
+                disabled={!notasDisponiveis.length}
+              >
+                <FileText className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Visualizar</span>
               </Button>
               <Button
                 variant="outline"
@@ -607,12 +615,12 @@ export default function BalanceteRelatorios() {
                 onClick={exportNotasConsolidadasPdf}
                 disabled={!notasDisponiveis.length}
               >
-                <Download className="mr-2 h-4 w-4" />
-                Baixar PDF
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Baixar PDF</span>
               </Button>
               <Button variant="outline" className="rounded-full" onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimir
+                <Printer className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Imprimir</span>
               </Button>
             </>
           )}
