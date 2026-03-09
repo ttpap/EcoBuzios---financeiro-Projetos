@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { VendorCombobox, type Vendor } from "@/components/execucao/VendorCombobox";
 import { cn } from "@/lib/utils";
 import { PDFDocument } from "pdf-lib";
-import { Download, FileUp, Trash2 } from "lucide-react";
+import { Download, FileUp, Trash2, Eye } from "lucide-react";
 
 type PaymentMethod = "transferencia" | "cheque" | "boleto" | "pix";
 
@@ -38,6 +38,16 @@ async function compressPdf(file: File): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.load(bytes);
   const out = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
   return out;
+}
+
+function downloadBlobUrl(url: string, fileName: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 export function ExecucaoLancamentosDialog({
@@ -120,6 +130,10 @@ export function ExecucaoLancamentosDialog({
         invoice_size_bytes = compressed.byteLength;
       }
 
+      const user = await supabase.auth.getUser();
+      const userId = user.data.user?.id;
+      if (!userId) throw new Error("Sem sessão");
+
       const { data, error } = await supabase
         .from("transactions")
         .insert({
@@ -131,7 +145,7 @@ export function ExecucaoLancamentosDialog({
           amount: parsedAmount,
           description: line.name,
           document_number: documentNumber.trim() || null,
-          created_by_user_id: (await supabase.auth.getUser()).data.user?.id,
+          created_by_user_id: userId,
           vendor_id: vendor.id,
           payment_method: paymentMethod,
           due_date: dueDate || null,
@@ -175,159 +189,192 @@ export function ExecucaoLancamentosDialog({
     onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
   });
 
-  const downloadInvoice = useMutation({
+  const signedUrl = useMutation({
     mutationFn: async (path: string) => {
       const { data, error } = await supabase.storage.from("invoices").createSignedUrl(path, 60);
       if (error) throw error;
       return data.signedUrl;
     },
-    onSuccess: (url) => window.open(url, "_blank", "noopener,noreferrer"),
-    onError: (e: any) => toast.error(e.message ?? "Falha ao baixar"),
+    onError: (e: any) => toast.error(e.message ?? "Falha ao gerar link"),
   });
 
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl rounded-3xl">
-        <DialogHeader>
-          <DialogTitle>
-            Lançamentos — {line?.code || ""} {line?.name || ""} · Mês {monthIndex}
-          </DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Lançamentos — {line?.code || ""} {line?.name || ""} · Mês {monthIndex}
+            </DialogTitle>
+          </DialogHeader>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="rounded-3xl border bg-white p-4">
-            <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total do mês</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-              {formatBRL(monthTotal)}
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              <div>
-                <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Fornecedor / Credor</div>
-                <VendorCombobox projectId={projectId} value={vendor} onChange={setVendor} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="rounded-3xl border bg-white p-4">
+              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total do mês</div>
+              <div className="mt-1 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
+                {formatBRL(monthTotal)}
               </div>
 
-              <div>
-                <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Forma de pagamento</div>
-                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
-                  <SelectTrigger className="rounded-2xl">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="transferencia">Transferência bancária</SelectItem>
-                    <SelectItem value="cheque">Cheque</SelectItem>
-                    <SelectItem value="boleto">Boleto bancário</SelectItem>
-                    <SelectItem value="pix">Pix</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Número do documento</div>
-                <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} className="rounded-2xl" />
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="mt-4 grid gap-3">
                 <div>
-                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Data de vencimento</div>
-                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded-2xl" />
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Fornecedor / Credor</div>
+                  <VendorCombobox projectId={projectId} value={vendor} onChange={setVendor} />
                 </div>
+
                 <div>
-                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Data de pagamento</div>
-                  <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} className="rounded-2xl" />
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Forma de pagamento</div>
+                  <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as any)}>
+                    <SelectTrigger className="rounded-2xl">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="transferencia">Transferência bancária</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="boleto">Boleto bancário</SelectItem>
+                      <SelectItem value="pix">Pix</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
 
-              <div>
-                <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Valor</div>
-                <Input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="rounded-2xl"
-                  inputMode="decimal"
-                />
-              </div>
-
-              <div>
-                <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexar Nota Fiscal (PDF)</div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    accept="application/pdf"
-                    className="rounded-2xl"
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-2xl"
-                    onClick={() => setFile(null)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Número do documento</div>
+                  <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} className="rounded-2xl" />
                 </div>
-                <div className="mt-1 text-[11px] text-[hsl(var(--muted-ink))]">
-                  O PDF é otimizado antes do upload para manter o sistema leve.
-                </div>
-              </div>
 
-              <Button
-                onClick={() => createTx.mutate()}
-                disabled={createTx.isPending}
-                className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-              >
-                <FileUp className="mr-2 h-4 w-4" />
-                Salvar lançamento
-              </Button>
-            </div>
-          </Card>
-
-          <Card className="rounded-3xl border bg-white p-4">
-            <div className="text-sm font-semibold text-[hsl(var(--ink))]">Lançamentos do mês</div>
-            <div className="mt-3 grid gap-2">
-              {(txQuery.data ?? []).map((t: any) => (
-                <div
-                  key={t.id}
-                  className={cn(
-                    "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3"
-                  )}
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[hsl(var(--ink))]">{formatBRL(Number(t.amount ?? 0))}</div>
-                    <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
-                      {t.paid_date ? `Pago em ${t.paid_date}` : ""}
-                      {t.document_number ? ` · Doc: ${t.document_number}` : ""}
-                    </div>
-                    {t.invoice_file_name && (
-                      <button
-                        className="mt-2 inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1 text-xs font-medium text-[hsl(var(--ink))] hover:bg-black/5"
-                        onClick={() => downloadInvoice.mutate(String(t.invoice_path))}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Baixar nota fiscal
-                      </button>
-                    )}
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Data de vencimento</div>
+                    <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded-2xl" />
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => deleteTx.mutate(t.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Data de pagamento</div>
+                    <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} className="rounded-2xl" />
+                  </div>
                 </div>
-              ))}
 
-              {!txQuery.data?.length && (
-                <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
-                  Nenhum lançamento neste mês.
+                <div>
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Valor</div>
+                  <Input
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="rounded-2xl"
+                    inputMode="decimal"
+                  />
                 </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </DialogContent>
-    </Dialog>
+
+                <div>
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexar Nota Fiscal (PDF)</div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      accept="application/pdf"
+                      className="rounded-2xl"
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-2xl"
+                      onClick={() => setFile(null)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={() => createTx.mutate()}
+                  disabled={createTx.isPending}
+                  className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+                >
+                  <FileUp className="mr-2 h-4 w-4" />
+                  Salvar lançamento
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="rounded-3xl border bg-white p-4">
+              <div className="text-sm font-semibold text-[hsl(var(--ink))]">Lançamentos do mês</div>
+              <div className="mt-3 grid gap-2">
+                {(txQuery.data ?? []).map((t: any) => (
+                  <div
+                    key={t.id}
+                    className={cn(
+                      "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3"
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[hsl(var(--ink))]">{formatBRL(Number(t.amount ?? 0))}</div>
+                      <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
+                        {t.paid_date ? `Pago em ${t.paid_date}` : ""}
+                        {t.document_number ? ` · Doc: ${t.document_number}` : ""}
+                      </div>
+
+                      {t.invoice_file_name && t.invoice_path && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-full"
+                            onClick={async () => {
+                              const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                              setPreviewUrl(url);
+                              setPreviewOpen(true);
+                            }}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            Visualizar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-full"
+                            onClick={async () => {
+                              const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                              downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
+                            }}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Baixar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => deleteTx.mutate(t.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                {!txQuery.data?.length && (
+                  <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
+                    Nenhum lançamento neste mês.
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-5xl rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Visualizar nota fiscal</DialogTitle>
+          </DialogHeader>
+          <div className="h-[75vh] overflow-hidden rounded-2xl border bg-white">
+            <iframe title="Nota fiscal" src={previewUrl} className="h-full w-full" />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

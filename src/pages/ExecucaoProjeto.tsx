@@ -11,6 +11,7 @@ import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { ExecucaoLancamentosDialog } from "@/components/execucao/ExecucaoLancamentosDialog";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function buildMonthLabels(monthsCount: number) {
   return Array.from({ length: monthsCount }, (_, i) => ({ idx: i + 1, label: `Mês ${i + 1}` }));
@@ -21,6 +22,15 @@ function monthRefFromIndex(index1: number) {
   const base = new Date(Date.UTC(2000, 0, 1));
   const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + (index1 - 1), 1));
   return d.toISOString().slice(0, 10);
+}
+
+function plannedMonthAmount(line: BudgetLine, monthIndex1: number) {
+  const start = Number(line.start_month ?? 1);
+  const end = Number((line as any).end_month ?? start);
+  if (monthIndex1 < start || monthIndex1 > end) return 0;
+  const months = Math.max(1, end - start + 1);
+  const total = Number(line.total_approved ?? 0);
+  return total / months;
 }
 
 export default function ExecucaoProjeto() {
@@ -87,7 +97,7 @@ export default function ExecucaoProjeto() {
   const monthsCount = budgetQuery.data?.months_count ?? 12;
   const monthCols = useMemo(() => buildMonthLabels(monthsCount), [monthsCount]);
 
-  const agg = useMemo(() => {
+  const executedAgg = useMemo(() => {
     const byLineMonth = new Map<string, number>();
     const byLine = new Map<string, number>();
     const byMonth = new Map<string, number>();
@@ -107,16 +117,63 @@ export default function ExecucaoProjeto() {
     return { total, byLine, byMonth, byLineMonth };
   }, [txQuery.data]);
 
+  const plannedAgg = useMemo(() => {
+    const byLineMonth = new Map<string, number>();
+    const byMonth = new Map<string, number>();
+    const byLine = new Map<string, number>();
+    let total = 0;
+
+    for (const l of linesQuery.data ?? []) {
+      if (l.is_subtotal) continue;
+      const lineTotal = Number(l.total_approved ?? 0);
+      total += lineTotal;
+      byLine.set(l.id, (byLine.get(l.id) ?? 0) + lineTotal);
+
+      for (let m = 1; m <= monthsCount; m++) {
+        const mk = monthRefFromIndex(m);
+        const planned = plannedMonthAmount(l, m);
+        if (!planned) continue;
+        byMonth.set(mk, (byMonth.get(mk) ?? 0) + planned);
+        byLineMonth.set(`${l.id}__${mk}`, planned);
+      }
+    }
+
+    return { total, byLine, byMonth, byLineMonth };
+  }, [linesQuery.data, monthsCount]);
+
+  const lineTotals = useMemo(() => {
+    const byLine = new Map<string, { planned: number; executed: number }>();
+    for (const l of linesQuery.data ?? []) {
+      if (l.is_subtotal) continue;
+      const planned = Number(l.total_approved ?? 0);
+      const executed = executedAgg.byLine.get(l.id) ?? 0;
+      byLine.set(l.id, { planned, executed });
+    }
+    return byLine;
+  }, [linesQuery.data, executedAgg.byLine]);
+
   const itemTotals = useMemo(() => {
-    const byCat = new Map<string, number>();
-    const lines = linesQuery.data ?? [];
-    for (const l of lines) {
+    const byCat = new Map<string, { planned: number; executed: number }>();
+    for (const l of linesQuery.data ?? []) {
       if (l.is_subtotal) continue;
       const cid = l.category_id ?? "";
-      byCat.set(cid, (byCat.get(cid) ?? 0) + (agg.byLine.get(l.id) ?? 0));
+      const curr = byCat.get(cid) ?? { planned: 0, executed: 0 };
+      curr.planned += Number(l.total_approved ?? 0);
+      curr.executed += executedAgg.byLine.get(l.id) ?? 0;
+      byCat.set(cid, curr);
     }
     return byCat;
-  }, [linesQuery.data, agg.byLine]);
+  }, [linesQuery.data, executedAgg.byLine]);
+
+  const footerByMonth = useMemo(() => {
+    const totals = monthCols.map((m) => {
+      const mk = monthRefFromIndex(m.idx);
+      const planned = plannedAgg.byMonth.get(mk) ?? 0;
+      const executed = executedAgg.byMonth.get(mk) ?? 0;
+      return { mk, planned, executed, remaining: planned - executed };
+    });
+    return totals;
+  }, [monthCols, plannedAgg.byMonth, executedAgg.byMonth]);
 
   const [open, setOpen] = useState(false);
   const [selectedLine, setSelectedLine] = useState<BudgetLine | null>(null);
@@ -135,10 +192,13 @@ export default function ExecucaoProjeto() {
 
   if (!budgetQuery.data) {
     return (
-      <div className="rounded-3xl border bg-white p-6">
-        <div className="text-sm font-semibold text-[hsl(var(--ink))]">Sem orçamento</div>
-        <div className="mt-2 text-sm text-[hsl(var(--muted-ink))]">
-          Crie o orçamento no Balancete PRO antes de lançar execução.
+      <div className="grid gap-6">
+        <BalanceteTabs />
+        <div className="rounded-3xl border bg-white p-6">
+          <div className="text-sm font-semibold text-[hsl(var(--ink))]">Sem orçamento</div>
+          <div className="mt-2 text-sm text-[hsl(var(--muted-ink))]">
+            Crie o orçamento no Balancete PRO antes de lançar execução.
+          </div>
         </div>
       </div>
     );
@@ -156,7 +216,9 @@ export default function ExecucaoProjeto() {
               Balancete de Execução
             </h1>
             <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Total executado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(agg.total)}</span>
+              Planejado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total)}</span> · Executado:{" "}
+              <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(executedAgg.total)}</span> · Saldo:{" "}
+              <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total - executedAgg.total)}</span>
             </div>
           </div>
         </div>
@@ -174,57 +236,133 @@ export default function ExecucaoProjeto() {
                     {m.label}
                   </TableHead>
                 ))}
-                <TableHead className="min-w-[160px] text-right">Executado</TableHead>
+                <TableHead className="min-w-[140px] text-right">Planejado</TableHead>
+                <TableHead className="min-w-[140px] text-right">Executado</TableHead>
+                <TableHead className="min-w-[140px] text-right">Saldo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(categoriesQuery.data ?? []).map((cat: any) => {
                 const lines = (linesQuery.data ?? []).filter((l) => l.category_id === cat.id);
-                const itemTotal = itemTotals.get(cat.id) ?? 0;
+                const item = itemTotals.get(cat.id) ?? { planned: 0, executed: 0 };
 
                 return (
                   <>
                     <TableRow key={cat.id} className="bg-black/[0.03]">
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.code}</TableCell>
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.name}</TableCell>
-                      {monthCols.map((m) => {
-                        const mk = monthRefFromIndex(m.idx);
-                        const v = agg.byMonth.get(mk) ?? 0;
-                        return <TableCell key={m.idx} className="text-right text-sm text-[hsl(var(--muted-ink))]">{formatBRL(v)}</TableCell>;
-                      })}
-                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(itemTotal)}</TableCell>
+                      {monthCols.map((m) => (
+                        <TableCell key={m.idx} />
+                      ))}
+                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                        {formatBRL(item.planned)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                        {formatBRL(item.executed)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                        {formatBRL(item.planned - item.executed)}
+                      </TableCell>
                     </TableRow>
 
-                    {lines.map((l) => (
-                      <TableRow key={l.id}>
-                        <TableCell className="text-sm text-[hsl(var(--muted-ink))]">{l.code || ""}</TableCell>
-                        <TableCell className="text-sm font-medium text-[hsl(var(--ink))]">{l.name}</TableCell>
-                        {monthCols.map((m) => {
-                          const mk = monthRefFromIndex(m.idx);
-                          const v = agg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
-                          return (
-                            <TableCell key={m.idx} className="text-right">
-                              <button
-                                className={cn(
-                                  "w-full rounded-xl px-2 py-1 text-sm transition",
-                                  v ? "bg-[hsl(var(--brand)/0.12)] font-semibold text-[hsl(var(--ink))]" : "text-[hsl(var(--muted-ink))] hover:bg-black/5"
-                                )}
-                                onClick={() => {
-                                  setSelectedLine(l);
-                                  setSelectedMonth(m.idx);
-                                  setOpen(true);
-                                }}
-                              >
-                                {formatBRL(v)}
-                              </button>
-                            </TableCell>
-                          );
-                        })}
-                        <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
-                          {formatBRL(agg.byLine.get(l.id) ?? 0)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {lines.map((l) => {
+                      const totals = lineTotals.get(l.id) ?? { planned: 0, executed: 0 };
+                      const saldoLine = totals.planned - totals.executed;
+
+                      return (
+                        <TableRow key={l.id}>
+                          <TableCell className="text-sm text-[hsl(var(--muted-ink))]">{l.code || ""}</TableCell>
+                          <TableCell className="text-sm font-medium text-[hsl(var(--ink))]">{l.name}</TableCell>
+
+                          {monthCols.map((m) => {
+                            const mk = monthRefFromIndex(m.idx);
+                            const planned = plannedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
+                            const executed = executedAgg.byLineMonth.get(`${l.id}__${mk}`) ?? 0;
+                            const remaining = planned - executed;
+
+                            const showValue = executed === 0 ? planned : remaining;
+                            const isOver = executed > planned && planned > 0;
+                            const isPartial = executed > 0 && executed < planned;
+                            const isExact = planned > 0 && executed === planned;
+                            const isUnplannedSpend = planned === 0 && executed > 0;
+
+                            const bg = isUnplannedSpend || isOver
+                              ? "bg-red-50"
+                              : isExact
+                                ? "bg-emerald-50"
+                                : isPartial
+                                  ? "bg-amber-50"
+                                  : planned
+                                    ? "bg-[hsl(var(--brand)/0.10)]"
+                                    : "";
+
+                            const fg = isUnplannedSpend || isOver
+                              ? "text-red-700"
+                              : isExact
+                                ? "text-emerald-700"
+                                : isPartial
+                                  ? "text-amber-800"
+                                  : planned
+                                    ? "text-[hsl(var(--ink))]"
+                                    : "text-[hsl(var(--muted-ink))]";
+
+                            return (
+                              <TableCell key={m.idx} className="text-right">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      className={cn(
+                                        "w-full rounded-xl px-2 py-1 text-sm transition",
+                                        bg,
+                                        planned || executed ? "hover:bg-black/5" : "hover:bg-black/5",
+                                        fg,
+                                        (planned || executed) ? "font-semibold" : ""
+                                      )}
+                                      onClick={() => {
+                                        setSelectedLine(l);
+                                        setSelectedMonth(m.idx);
+                                        setOpen(true);
+                                      }}
+                                    >
+                                      {formatBRL(showValue)}
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-[260px]">
+                                    <div className="grid gap-1 text-xs">
+                                      <div>
+                                        <span className="text-[hsl(var(--muted-ink))]">Planejado:</span>{" "}
+                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(planned)}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[hsl(var(--muted-ink))]">Executado:</span>{" "}
+                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(executed)}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[hsl(var(--muted-ink))]">Saldo:</span>{" "}
+                                        <span className="font-medium text-[hsl(var(--ink))]">{formatBRL(remaining)}</span>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                            );
+                          })}
+
+                          <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                            {formatBRL(totals.planned)}
+                          </TableCell>
+                          <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
+                            {formatBRL(totals.executed)}
+                          </TableCell>
+                          <TableCell className={cn(
+                            "text-right font-semibold",
+                            saldoLine < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                          )}>
+                            {formatBRL(saldoLine)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </>
                 );
               })}
@@ -232,15 +370,22 @@ export default function ExecucaoProjeto() {
               <TableRow className="bg-[hsl(var(--app-bg))]">
                 <TableCell />
                 <TableCell className="font-semibold text-[hsl(var(--ink))]">TOTAL GERAL</TableCell>
-                {monthCols.map((m) => {
-                  const mk = monthRefFromIndex(m.idx);
-                  return (
-                    <TableCell key={m.idx} className="text-right font-semibold text-[hsl(var(--ink))]">
-                      {formatBRL(agg.byMonth.get(mk) ?? 0)}
-                    </TableCell>
-                  );
-                })}
-                <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(agg.total)}</TableCell>
+                {footerByMonth.map((m) => (
+                  <TableCell key={m.mk} className={cn(
+                    "text-right font-semibold",
+                    m.remaining < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                  )}>
+                    {formatBRL(m.remaining)}
+                  </TableCell>
+                ))}
+                <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total)}</TableCell>
+                <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(executedAgg.total)}</TableCell>
+                <TableCell className={cn(
+                  "text-right font-semibold",
+                  plannedAgg.total - executedAgg.total < 0 ? "text-red-700" : "text-[hsl(var(--ink))]"
+                )}>
+                  {formatBRL(plannedAgg.total - executedAgg.total)}
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>
