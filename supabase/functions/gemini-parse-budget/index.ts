@@ -39,15 +39,16 @@ function buildPrompt(input: {
     "- total_geral (number)",
     "\nRegras:",
     "1) Valores devem ser NUMÉRICOS (use ponto como separador decimal).",
-    "2) Se não houver total_item, calcule como soma dos subitens.",
-    "3) Se total_geral não existir, calcule como soma dos totais dos itens.",
-    "4) Não invente itens; use apenas o que aparece no conteúdo.",
+    "2) Não invente itens; use apenas o que aparece no conteúdo.",
+    "3) Se não houver total_item, calcule como soma dos subitens.",
+    "4) Se total_geral não existir, calcule como soma dos totais dos itens.",
     "\nContexto do arquivo:",
     `Arquivo: ${fileName ?? "(desconhecido)"}`,
     `MIME: ${mimeType ?? "(desconhecido)"}`,
     `Dica meses: ${hintMonths ?? 0}`,
-    "\nConteúdo extraído (pode estar incompleto):",
-    extractedText?.slice(0, 25000) ?? "",
+    "\nConteúdo extraído (trecho):",
+    // Mantemos curto para não estourar quota/tokens do free tier
+    extractedText?.slice(0, 8000) ?? "",
   ].join("\n");
 }
 
@@ -94,6 +95,20 @@ function normalizeToParsedBudget(g: GeminiBudget) {
   };
 }
 
+function ok<T>(payload: T) {
+  return new Response(JSON.stringify({ ok: true, ...payload }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function fail(payload: { message: string; code?: number; retryAfterSeconds?: number }) {
+  return new Response(JSON.stringify({ ok: false, ...payload }), {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -103,10 +118,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       console.error("[gemini-parse-budget] Missing GEMINI_API_KEY");
-      return new Response(JSON.stringify({ error: "Missing GEMINI_API_KEY" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return fail({ message: "Secret GEMINI_API_KEY não configurada no Supabase." });
     }
 
     const body = await req.json();
@@ -126,7 +138,7 @@ serve(async (req) => {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 1400,
             responseMimeType: "application/json",
           },
         }),
@@ -139,9 +151,23 @@ serve(async (req) => {
         status: resp.status,
         body: t,
       });
-      return new Response(JSON.stringify({ error: "Gemini request failed", status: resp.status }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+
+      if (resp.status === 429) {
+        const match = t.match(/"retryDelay"\s*:\s*"(\d+)s"/);
+        const retryAfterSeconds = match ? Number(match[1]) : undefined;
+        return fail({
+          code: 429,
+          retryAfterSeconds,
+          message:
+            retryAfterSeconds != null
+              ? `Cota do Gemini excedida. Tente novamente em ~${retryAfterSeconds}s (ou habilite faturamento/upgrade).`
+              : "Cota do Gemini excedida. Aguarde e tente novamente (ou habilite faturamento/upgrade).",
+        });
+      }
+
+      return fail({
+        code: resp.status,
+        message: "Falha ao consultar o Gemini. Verifique sua chave/limites e tente novamente.",
       });
     }
 
@@ -151,25 +177,20 @@ serve(async (req) => {
     let parsed: GeminiBudget;
     try {
       parsed = JSON.parse(text);
-    } catch (e) {
-      console.error("[gemini-parse-budget] Failed to parse JSON", { textSnippet: String(text).slice(0, 500) });
-      return new Response(JSON.stringify({ error: "Failed to parse Gemini JSON" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    } catch (_e) {
+      console.error("[gemini-parse-budget] Failed to parse JSON", {
+        textSnippet: String(text).slice(0, 500),
+      });
+      return fail({
+        message:
+          "O Gemini não retornou JSON válido. Tente novamente ou envie um PDF/planilha com layout mais simples.",
       });
     }
 
     const normalized = normalizeToParsedBudget(parsed);
-
-    return new Response(JSON.stringify({ parsed: normalized }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return ok({ parsed: normalized });
   } catch (e) {
     console.error("[gemini-parse-budget] Unhandled error", { error: String(e) });
-    return new Response(JSON.stringify({ error: "Unhandled" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return fail({ message: "Erro interno na função de IA. Tente novamente." });
   }
 });
