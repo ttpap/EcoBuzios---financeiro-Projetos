@@ -26,6 +26,7 @@ export type Budget = {
 export type BudgetCategory = {
   id: string;
   budget_id: string;
+  code: number;
   name: string;
   sort_order: number;
 };
@@ -36,6 +37,7 @@ export type BudgetLine = {
   category_id: string | null;
   code?: string | null;
   start_month?: number;
+  end_month?: number;
   duration_months?: number;
   name: string;
   quantity: number | null;

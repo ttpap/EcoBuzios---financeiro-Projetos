@@ -25,18 +25,18 @@ function buildMonthLabels(monthsCount: number) {
   }));
 }
 
-function monthlyValue(total: number, durationMonths: number) {
-  const d = Math.max(1, durationMonths);
+function monthlyValue(total: number, months: number) {
+  const d = Math.max(1, months);
   return total / d;
 }
 
 function calcMonthAmount(line: BudgetLine, monthIndex1: number) {
   const start = Number(line.start_month ?? 1);
-  const dur = Number(line.duration_months ?? 1);
-  const end = start + dur - 1;
+  const end = Number((line as any).end_month ?? start);
   if (monthIndex1 < start || monthIndex1 > end) return 0;
   const total = Number(line.total_approved ?? 0);
-  return monthlyValue(total, dur);
+  const months = end - start + 1;
+  return monthlyValue(total, months);
 }
 
 export default function PlanilhaProjeto() {
@@ -79,20 +79,18 @@ export default function PlanilhaProjeto() {
         .from("budgets")
         .insert({
           project_id: activeProjectId,
-          name: "Planilha orçamentária",
-          months_count: clampInt(months, 1, 60),
+          name: "Orçamento",
+          months_count: clampInt(months, 1, 120),
         } as any)
         .select("*")
         .single();
       if (error) throw error;
       return data as Budget;
     },
-    onSuccess: (b) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget", activeProjectId] });
-      toast.success("Planilha pronta");
-      return b;
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao criar planilha"),
+    onError: (e: any) => toast.error(e.message ?? "Falha ao criar"),
   });
 
   const budgetQuery = useQuery({
@@ -118,7 +116,7 @@ export default function PlanilhaProjeto() {
         .from("budget_categories")
         .select("*")
         .eq("budget_id", budgetQuery.data!.id)
-        .order("sort_order", { ascending: true });
+        .order("code", { ascending: true });
       if (error) throw error;
       return (data ?? []) as BudgetCategory[];
     },
@@ -141,10 +139,10 @@ export default function PlanilhaProjeto() {
   const monthsCount = budgetQuery.data?.months_count ?? Number((projectQuery.data as any)?.duration_months ?? 12) ?? 12;
   const monthCols = useMemo(() => buildMonthLabels(monthsCount), [monthsCount]);
 
-  const [newItemName, setNewItemName] = useState("");
+  const [newItemCode, setNewItemCode] = useState<string>("");
+  const [newItemName, setNewItemName] = useState<string>("");
 
   useEffect(() => {
-    // Quando abrir a página, se ainda não existe budget, cria.
     if (!activeProjectId) return;
     if (budgetQuery.isLoading) return;
     if (!budgetQuery.data) ensureBudgetMutation.mutate();
@@ -152,17 +150,18 @@ export default function PlanilhaProjeto() {
 
   const addItem = useMutation({
     mutationFn: async () => {
-      if (!budgetQuery.data?.id) throw new Error("Planilha não carregada");
+      if (!budgetQuery.data?.id) throw new Error("Orçamento não carregado");
+      const code = clampInt(Number(newItemCode), 1, 9999);
       const name = newItemName.trim();
-      if (!name) throw new Error("Informe o nome do item");
+      if (!Number.isFinite(code) || !name) throw new Error("Preencha código e descrição");
 
-      const sortOrder = (categoriesQuery.data?.length ?? 0) + 1;
       const { data, error } = await supabase
         .from("budget_categories")
         .insert({
           budget_id: budgetQuery.data.id,
+          code,
           name,
-          sort_order: sortOrder,
+          sort_order: code,
         } as any)
         .select("*")
         .single();
@@ -170,16 +169,17 @@ export default function PlanilhaProjeto() {
       return data as BudgetCategory;
     },
     onSuccess: () => {
+      setNewItemCode("");
       setNewItemName("");
       queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
-      toast.success("Item adicionado");
+      toast.success("Item criado");
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao adicionar"),
+    onError: (e: any) => toast.error(e.message ?? "Falha ao criar item"),
   });
 
   const addSubitem = useMutation({
     mutationFn: async (categoryId: string) => {
-      if (!budgetQuery.data?.id) throw new Error("Planilha não carregada");
+      if (!budgetQuery.data?.id) throw new Error("Orçamento não carregado");
 
       const sortOrder = (linesQuery.data?.length ?? 0) + 1;
       const { data, error } = await supabase
@@ -187,11 +187,11 @@ export default function PlanilhaProjeto() {
         .insert({
           budget_id: budgetQuery.data.id,
           category_id: categoryId,
-          code: null,
-          name: "Novo subitem",
+          code: "",
+          name: "",
           total_approved: 0,
           start_month: 1,
-          duration_months: 1,
+          end_month: 1,
           is_subtotal: false,
           sort_order: sortOrder,
         } as any)
@@ -265,9 +265,6 @@ export default function PlanilhaProjeto() {
     return (
       <div className="rounded-3xl border bg-white p-6">
         <div className="text-sm font-semibold text-[hsl(var(--ink))]">Selecione um projeto</div>
-        <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-          Para montar a planilha, escolha um projeto.
-        </p>
         <Button
           asChild
           className="mt-4 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
@@ -292,7 +289,7 @@ export default function PlanilhaProjeto() {
               Voltar
             </Button>
             <h1 className="mt-4 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-              Planilha orçamentária
+              Balancete PRO
             </h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
               {projectQuery.data?.project_number ? `#${(projectQuery.data as any).project_number} · ` : ""}
@@ -300,20 +297,31 @@ export default function PlanilhaProjeto() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Input
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              className="h-10 w-56 rounded-full"
-              placeholder="Novo item (ex: Pessoal)"
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Código do item</div>
+              <Input
+                value={newItemCode}
+                onChange={(e) => setNewItemCode(e.target.value)}
+                className="h-10 w-28 rounded-full"
+                inputMode="numeric"
+              />
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Descrição do item</div>
+              <Input
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="h-10 w-64 rounded-full"
+              />
+            </div>
             <Button
               onClick={() => addItem.mutate()}
-              disabled={!newItemName.trim() || addItem.isPending}
-              className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+              disabled={!newItemCode.trim() || !newItemName.trim() || addItem.isPending}
+              className="h-10 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
             >
               <Plus className="mr-2 h-4 w-4" />
-              Adicionar item
+              Criar Item
             </Button>
           </div>
         </div>
@@ -327,8 +335,8 @@ export default function PlanilhaProjeto() {
                 <TableHead className="min-w-[110px]">Código</TableHead>
                 <TableHead className="min-w-[320px]">Descrição</TableHead>
                 <TableHead className="min-w-[160px] text-right">Valor total</TableHead>
-                <TableHead className="min-w-[140px] text-right">Meses</TableHead>
                 <TableHead className="min-w-[140px] text-right">Mês inicial</TableHead>
+                <TableHead className="min-w-[140px] text-right">Mês final</TableHead>
                 {monthCols.map((m) => (
                   <TableHead key={m.idx} className="min-w-[120px] text-right">
                     {m.label}
@@ -338,14 +346,14 @@ export default function PlanilhaProjeto() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(categoriesQuery.data ?? []).map((cat) => {
+              {(categoriesQuery.data ?? []).map((cat: any) => {
                 const lines = (linesQuery.data ?? []).filter((l) => l.category_id === cat.id);
                 const itemTotal = itemTotals.get(cat.id) ?? 0;
 
                 return (
                   <>
                     <TableRow key={cat.id} className="bg-black/[0.03]">
-                      <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.sort_order}</TableCell>
+                      <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.code}</TableCell>
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">
                         {cat.name}
                         <div className="mt-2">
@@ -356,7 +364,7 @@ export default function PlanilhaProjeto() {
                             onClick={() => addSubitem.mutate(cat.id)}
                           >
                             <Plus className="mr-2 h-4 w-4" />
-                            Adicionar subitem
+                            Adicionar Subitem
                           </Button>
                         </div>
                       </TableCell>
@@ -372,9 +380,9 @@ export default function PlanilhaProjeto() {
                     </TableRow>
 
                     {lines.map((l) => {
-                      const dur = clampInt(Number(l.duration_months ?? 1), 1, monthsCount);
                       const start = clampInt(Number(l.start_month ?? 1), 1, monthsCount);
-                      const invalid = start + dur - 1 > monthsCount;
+                      const end = clampInt(Number((l as any).end_month ?? start), 1, monthsCount);
+                      const invalid = end < start || end > monthsCount;
 
                       return (
                         <TableRow key={l.id}>
@@ -383,7 +391,7 @@ export default function PlanilhaProjeto() {
                               value={l.code ?? ""}
                               onChange={(e) => updateLine.mutate({ id: l.id, patch: { code: e.target.value } })}
                               className="h-9 w-24 rounded-full"
-                              placeholder="1.1"
+                              inputMode="numeric"
                             />
                           </TableCell>
 
@@ -392,7 +400,6 @@ export default function PlanilhaProjeto() {
                               value={l.name}
                               onChange={(e) => updateLine.mutate({ id: l.id, patch: { name: e.target.value } })}
                               className="h-9 rounded-full"
-                              placeholder="Ex: Coordenador Geral"
                             />
                           </TableCell>
 
@@ -415,12 +422,19 @@ export default function PlanilhaProjeto() {
                               type="number"
                               min={1}
                               max={monthsCount}
-                              value={dur}
+                              value={start}
                               onChange={(e) => {
-                                const nextDur = clampInt(Number(e.target.value), 1, monthsCount);
-                                updateLine.mutate({ id: l.id, patch: { duration_months: nextDur } as any });
+                                const nextStart = clampInt(Number(e.target.value), 1, monthsCount);
+                                const nextEnd = Math.max(nextStart, end);
+                                updateLine.mutate({
+                                  id: l.id,
+                                  patch: { start_month: nextStart, end_month: nextEnd } as any,
+                                });
                               }}
-                              className="h-9 w-24 rounded-full text-right"
+                              className={cn(
+                                "h-9 w-24 rounded-full text-right",
+                                invalid ? "border-red-300" : ""
+                              )}
                             />
                           </TableCell>
 
@@ -429,10 +443,10 @@ export default function PlanilhaProjeto() {
                               type="number"
                               min={1}
                               max={monthsCount}
-                              value={start}
+                              value={end}
                               onChange={(e) => {
-                                const nextStart = clampInt(Number(e.target.value), 1, monthsCount);
-                                updateLine.mutate({ id: l.id, patch: { start_month: nextStart } as any });
+                                const nextEnd = clampInt(Number(e.target.value), 1, monthsCount);
+                                updateLine.mutate({ id: l.id, patch: { end_month: nextEnd } as any });
                               }}
                               className={cn(
                                 "h-9 w-24 rounded-full text-right",
@@ -440,9 +454,7 @@ export default function PlanilhaProjeto() {
                               )}
                             />
                             {invalid && (
-                              <div className="mt-1 text-[11px] text-red-600">
-                                Ultrapassa o limite do projeto.
-                              </div>
+                              <div className="mt-1 text-[11px] text-red-600">Período inválido.</div>
                             )}
                           </TableCell>
 
@@ -450,7 +462,14 @@ export default function PlanilhaProjeto() {
                             const amt = calcMonthAmount(l, m.idx);
                             return (
                               <TableCell key={m.idx} className="text-right">
-                                <span className={cn("text-sm", amt ? "font-semibold text-[hsl(var(--ink))]" : "text-[hsl(var(--muted-ink))]")}> 
+                                <span
+                                  className={cn(
+                                    "text-sm",
+                                    amt
+                                      ? "font-semibold text-[hsl(var(--ink))]"
+                                      : "text-[hsl(var(--muted-ink))]"
+                                  )}
+                                >
                                   {formatBRL(amt)}
                                 </span>
                               </TableCell>
@@ -495,10 +514,6 @@ export default function PlanilhaProjeto() {
           </Table>
         </div>
       </Card>
-
-      <div className="text-xs text-[hsl(var(--muted-ink))]">
-        Regra: mês inicial + duração - 1 não pode ultrapassar {monthsCount}. O banco valida isso no salvamento.
-      </div>
     </div>
   );
 }

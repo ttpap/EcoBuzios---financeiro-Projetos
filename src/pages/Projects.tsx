@@ -31,8 +31,6 @@ import { cn } from "@/lib/utils";
 import { FolderKanban, Plus, Trash2, Table2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-const durationOptions = [1, 2, 3, 6, 12] as const;
-
 export default function Projects() {
   const { session } = useSession();
   const queryClient = useQueryClient();
@@ -61,6 +59,8 @@ export default function Projects() {
   const createProject = useMutation({
     mutationFn: async () => {
       if (!session?.user?.id) throw new Error("Sem sessão");
+      const months = Math.max(1, Math.min(120, Number(durationMonths || 0)));
+
       const { data, error } = await supabase
         .from("projects")
         .insert({
@@ -68,7 +68,7 @@ export default function Projects() {
           project_number: projectNumber.trim() || null,
           name: name.trim(),
           description: description.trim() ? description.trim() : null,
-          duration_months: Math.max(1, Math.min(60, durationMonths)),
+          duration_months: months,
         } as any)
         .select("*")
         .single();
@@ -117,10 +117,10 @@ export default function Projects() {
               Projetos
             </div>
             <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-              Seus projetos
+              Projetos
             </h1>
             <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Crie projetos e monte a planilha orçamentária mensalmente distribuída.
+              Crie um projeto e monte o orçamento manualmente no Balancete PRO.
             </p>
           </div>
 
@@ -142,52 +142,33 @@ export default function Projects() {
                     value={projectNumber}
                     onChange={(e) => setProjectNumber(e.target.value)}
                     className="rounded-2xl"
-                    placeholder="Ex: 2026-ICMS-01"
                   />
                 </div>
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Nome</div>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-2xl" placeholder="Ex: Projeto X" />
+                  <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-2xl" />
                 </div>
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Descrição (opcional)</div>
-                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-2xl" placeholder="Objetivo, convênio, observações…" />
+                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="rounded-2xl" />
                 </div>
 
                 <div>
-                  <div className="mb-2 text-xs font-medium text-[hsl(var(--muted-ink))]">Duração total (meses)</div>
-                  <div className="flex flex-wrap gap-2">
-                    {durationOptions.map((m) => (
-                      <Button
-                        key={m}
-                        type="button"
-                        variant={durationMonths === m ? "default" : "outline"}
-                        className={cn(
-                          "rounded-full",
-                          durationMonths === m
-                            ? "bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-                            : ""
-                        )}
-                        onClick={() => setDurationMonths(m)}
-                      >
-                        {m} {m === 1 ? "mês" : "meses"}
-                      </Button>
-                    ))}
-                    <Input
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={durationMonths}
-                      onChange={(e) => setDurationMonths(Number(e.target.value))}
-                      className="h-10 w-24 rounded-full"
-                    />
-                  </div>
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Duração total (meses)</div>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={durationMonths}
+                    onChange={(e) => setDurationMonths(Number(e.target.value))}
+                    className="rounded-2xl"
+                  />
                 </div>
 
                 <Button
-                  disabled={!name.trim() || createProject.isPending}
+                  disabled={!name.trim() || !Number(durationMonths) || createProject.isPending}
                   onClick={() => createProject.mutate()}
                   className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
                 >
@@ -211,16 +192,14 @@ export default function Projects() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-xs text-[hsl(var(--muted-ink))]">
-                  {p.project_number ? `#${p.project_number}` : "Sem número"} · {p.duration_months ?? 12} meses
+                  {p.project_number ? `#${p.project_number}` : ""} {p.duration_months ?? 12} meses
                 </div>
                 <div className="mt-1 text-lg font-semibold tracking-tight text-[hsl(var(--ink))]">
                   {p.name}
                 </div>
                 {p.description ? (
                   <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">{p.description}</div>
-                ) : (
-                  <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">Sem descrição.</div>
-                )}
+                ) : null}
               </div>
               <div className="flex flex-col gap-2">
                 <Button
@@ -237,9 +216,9 @@ export default function Projects() {
                 </Button>
 
                 <Button asChild variant="outline" className="rounded-full">
-                  <Link to={`/balancete?project=${p.id}`}>
+                  <Link to="/balancete">
                     <Table2 className="mr-2 h-4 w-4" />
-                    Montar Planilha
+                    Balancete PRO
                   </Link>
                 </Button>
 
@@ -254,7 +233,7 @@ export default function Projects() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Excluir projeto?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Esta ação remove o projeto da sua lista (exclusão lógica). Você poderá recuperar depois via suporte.
+                        Esta ação remove o projeto da sua lista (exclusão lógica).
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
