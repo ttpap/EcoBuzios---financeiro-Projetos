@@ -13,6 +13,17 @@ import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function clampInt(v: number, min: number, max: number) {
   if (!Number.isFinite(v)) return min;
@@ -190,6 +201,98 @@ export default function PlanilhaProjeto() {
       toast.success("Item criado");
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao criar item"),
+  });
+
+  const updateCategory = useMutation({
+    mutationFn: async (payload: { id: string; patch: Partial<BudgetCategory> & { code?: number } }) => {
+      const { error } = await supabase.from("budget_categories").update(payload.patch as any).eq("id", payload.id);
+      if (error) throw error;
+      return payload;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao salvar item"),
+  });
+
+  const updateCategoryCode = useMutation({
+    mutationFn: async (payload: { categoryId: string; oldCode: number; newCode: number }) => {
+      if (!budgetQuery.data?.id) throw new Error("Orçamento não carregado");
+
+      const { data: lines, error: lErr } = await supabase
+        .from("budget_lines")
+        .select("id,code")
+        .eq("budget_id", budgetQuery.data.id)
+        .eq("category_id", payload.categoryId);
+      if (lErr) throw lErr;
+
+      const prefixOld = `${payload.oldCode}.`;
+      const prefixNew = `${payload.newCode}.`;
+
+      const updates = (lines ?? []).map((l: any) => {
+        const c = String(l.code ?? "");
+        const next = c.startsWith(prefixOld) ? `${prefixNew}${c.slice(prefixOld.length)}` : c;
+        return { id: String(l.id), code: next };
+      });
+
+      for (const u of updates) {
+        const { error } = await supabase.from("budget_lines").update({ code: u.code } as any).eq("id", u.id);
+        if (error) throw error;
+      }
+
+      const { error: cErr } = await supabase
+        .from("budget_categories")
+        .update({ code: payload.newCode, sort_order: payload.newCode } as any)
+        .eq("id", payload.categoryId);
+      if (cErr) throw cErr;
+
+      return payload;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
+      queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
+      toast.success("Código do item atualizado");
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar código"),
+  });
+
+  const deleteCategory = useMutation({
+    mutationFn: async (categoryId: string) => {
+      if (!budgetQuery.data?.id) throw new Error("Orçamento não carregado");
+
+      const { data: lines, error: lErr } = await supabase
+        .from("budget_lines")
+        .select("id")
+        .eq("budget_id", budgetQuery.data.id)
+        .eq("category_id", categoryId);
+      if (lErr) throw lErr;
+
+      const lineIds = (lines ?? []).map((l: any) => String(l.id));
+      if (lineIds.length) {
+        const { count, error: tErr } = await supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+          .in("budget_line_id", lineIds)
+          .is("deleted_at", null);
+        if (tErr) throw tErr;
+        if ((count ?? 0) > 0) {
+          throw new Error("Este item possui lançamentos na Execução. Não é possível excluir.");
+        }
+
+        const { error: delLinesErr } = await supabase.from("budget_lines").delete().eq("category_id", categoryId);
+        if (delLinesErr) throw delLinesErr;
+      }
+
+      const { error } = await supabase.from("budget_categories").delete().eq("id", categoryId);
+      if (error) throw error;
+      return categoryId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
+      queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
+      toast.success("Item excluído");
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao excluir item"),
   });
 
   const addSubitem = useMutation({
@@ -381,10 +484,31 @@ export default function PlanilhaProjeto() {
                 return (
                   <>
                     <TableRow key={cat.id} className="bg-black/[0.03]">
-                      <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.code}</TableCell>
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">
-                        {cat.name}
-                        <div className="mt-2">
+                        <Input
+                          defaultValue={String(cat.code ?? "")}
+                          className="h-9 w-24 rounded-full bg-white text-right"
+                          inputMode="numeric"
+                          onBlur={(e) => {
+                            const next = clampInt(Number(e.target.value), 1, 9999);
+                            const old = Number(cat.code);
+                            if (!Number.isFinite(next) || next === old) return;
+                            updateCategoryCode.mutate({ categoryId: cat.id, oldCode: old, newCode: next });
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-semibold text-[hsl(var(--ink))]">
+                        <Input
+                          defaultValue={String(cat.name ?? "")}
+                          className="h-9 rounded-full bg-white"
+                          onBlur={(e) => {
+                            const next = e.target.value.trim();
+                            const old = String(cat.name ?? "").trim();
+                            if (!next || next === old) return;
+                            updateCategory.mutate({ id: cat.id, patch: { name: next } as any });
+                          }}
+                        />
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -404,7 +528,32 @@ export default function PlanilhaProjeto() {
                       {monthCols.map((m) => (
                         <TableCell key={m.idx} />
                       ))}
-                      <TableCell />
+                      <TableCell className="text-right">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="rounded-full">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="rounded-3xl">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir item {cat.code}?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Isso removerá todos os subitens deste item. Se já houver lançamentos na Execução, a exclusão será bloqueada.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="rounded-full">Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="rounded-full bg-red-600 text-white hover:bg-red-700"
+                                onClick={() => deleteCategory.mutate(cat.id)}
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
                     </TableRow>
 
                     {lines.map((l) => {
@@ -520,26 +669,19 @@ export default function PlanilhaProjeto() {
                 );
               })}
 
-              {!!(categoriesQuery.data ?? []).length && (
-                <TableRow className="bg-[hsl(var(--app-bg))]">
-                  <TableCell />
-                  <TableCell className="font-semibold text-[hsl(var(--ink))]">TOTAL GERAL</TableCell>
-                  <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">
-                    {formatBRL(totalGeral)}
+              <TableRow className="bg-[hsl(var(--app-bg))]">
+                <TableCell />
+                <TableCell className="font-semibold text-[hsl(var(--ink))]">TOTAL</TableCell>
+                <TableCell className="text-right font-semibold text-[hsl(var(--ink))]">{formatBRL(totalGeral)}</TableCell>
+                <TableCell />
+                <TableCell />
+                {totalsByMonth.map((t, idx) => (
+                  <TableCell key={idx} className="text-right font-semibold text-[hsl(var(--ink))]">
+                    {formatBRL(t)}
                   </TableCell>
-                  <TableCell />
-                  <TableCell />
-                  {monthCols.map((m) => (
-                    <TableCell
-                      key={m.idx}
-                      className="text-right font-semibold text-[hsl(var(--ink))]"
-                    >
-                      {formatBRL(totalsByMonth[m.idx - 1] ?? 0)}
-                    </TableCell>
-                  ))}
-                  <TableCell />
-                </TableRow>
-              )}
+                ))}
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         </div>
