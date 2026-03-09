@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 
 const tabs = [
-  { to: "/balancete", label: "Planilha" },
+  { to: "/balancete", label: "Balancete PRO" },
+  { to: "/balancete/execucao", label: "Execução" },
 ];
 
 export function BalanceteTabs() {

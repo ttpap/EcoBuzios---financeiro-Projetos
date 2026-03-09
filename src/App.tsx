@@ -12,7 +12,7 @@ import ImportBudget from "@/pages/ImportBudget";
 import ImportConferencia from "@/pages/ImportConferencia";
 import MontarPlanilha from "@/pages/MontarPlanilha";
 import PlanilhaProjeto from "@/pages/PlanilhaProjeto";
-import Balancete from "@/pages/Balancete";
+import ExecucaoProjeto from "@/pages/ExecucaoProjeto";
 import BalanceteLinha from "@/pages/BalanceteLinha";
 import Lancamentos from "@/pages/Lancamentos";
 import Relatorios from "@/pages/Relatorios";
@@ -50,6 +50,7 @@ const App = () => (
             {/* Módulo Balancete */}
             <Route path="/balancete" element={<AuthedLayout><PlanilhaProjeto /></AuthedLayout>} />
             <Route path="/balancete/planilha" element={<AuthedLayout><PlanilhaProjeto /></AuthedLayout>} />
+            <Route path="/balancete/execucao" element={<AuthedLayout><ExecucaoProjeto /></AuthedLayout>} />
 
             {/* Rotas antigas (mantidas por compatibilidade, mas não usadas nesta etapa) */}
             <Route path="/balancete/importar" element={<AuthedLayout><ImportBudget /></AuthedLayout>} />

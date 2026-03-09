@@ -65,4 +65,12 @@ export type Transaction = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+
+  vendor_id?: string | null;
+  payment_method?: string | null;
+  due_date?: string | null;
+  paid_date?: string | null;
+  invoice_file_name?: string | null;
+  invoice_path?: string | null;
+  invoice_size_bytes?: number | null;
 };
