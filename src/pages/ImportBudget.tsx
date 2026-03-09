@@ -7,6 +7,7 @@ import { useSession } from "@/context/SessionContext";
 import { parseBudgetFile, type ParsedBudget } from "@/lib/budgetParser";
 import { extractPdfText } from "@/lib/pdfTextExtractor";
 import { buildProjectStoragePath, safeFileExt } from "@/lib/fileUtils";
+import { invokeEdgeFunctionOrThrow } from "@/lib/edgeFunctions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -110,31 +111,25 @@ export default function ImportBudget() {
       } else if (parseOut?.kind === "pdf") {
         extractedRawJson = { kind: "pdf", text: parseOut.text.slice(0, 20000) };
 
-        const { data, error } = await supabase.functions.invoke("gemini-parse-budget", {
-          body: {
-            fileName: file.name,
-            mimeType: file.type || ext,
-            extractedText: parseOut.text,
-            hintMonths: monthsCount,
-          },
+        const data = await invokeEdgeFunctionOrThrow<{ parsed: any }>("gemini-parse-budget", {
+          fileName: file.name,
+          mimeType: file.type || ext,
+          extractedText: parseOut.text,
+          hintMonths: monthsCount,
         });
-        if (error) throw error;
-        parsedBudgetJson = (data as any)?.parsed ?? null;
+
+        parsedBudgetJson = data?.parsed ?? null;
       } else if (parseOut?.kind === "image") {
         extractedRawJson = { kind: "image" };
 
-        // Para imagem, sem OCR local por enquanto; enviamos apenas metadados para IA.
-        // A etapa seguinte pode incluir OCR e anexar texto extraído.
-        const { data, error } = await supabase.functions.invoke("gemini-parse-budget", {
-          body: {
-            fileName: file.name,
-            mimeType: file.type || ext,
-            extractedText: `Arquivo de imagem enviado: ${file.name}. Interprete a estrutura a partir de um layout típico de planilha e descreva o que conseguir inferir.`,
-            hintMonths: monthsCount,
-          },
+        const data = await invokeEdgeFunctionOrThrow<{ parsed: any }>("gemini-parse-budget", {
+          fileName: file.name,
+          mimeType: file.type || ext,
+          extractedText: `Arquivo de imagem enviado: ${file.name}. Interprete a estrutura a partir de um layout típico de planilha e descreva o que conseguir inferir.`,
+          hintMonths: monthsCount,
         });
-        if (error) throw error;
-        parsedBudgetJson = (data as any)?.parsed ?? null;
+
+        parsedBudgetJson = data?.parsed ?? null;
       }
 
       // Cria importação em modo conferência
