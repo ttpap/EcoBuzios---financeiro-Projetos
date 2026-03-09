@@ -12,6 +12,8 @@ export type Project = {
   status: string;
   created_at: string;
 
+  execution_year?: number | null;
+
   logo_file_name?: string | null;
   logo_path?: string | null;
   logo_size_bytes?: number | null;
