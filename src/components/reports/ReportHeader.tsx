@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/money";
 import type { Project } from "@/lib/supabaseTypes";
 import { getProjectLogoUrl } from "@/lib/projectLogos";
@@ -51,15 +50,15 @@ export function ReportHeader({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          {logoUrl ? (
+        {logoUrl ? (
+          <div className="w-fit rounded-2xl border bg-white p-3 shadow-sm">
             <img
               src={logoUrl}
               alt={project?.name ? `Logo ${project.name}` : "Logo do projeto"}
-              className="h-12 w-auto rounded-xl border bg-white p-2"
+              className="h-16 w-auto md:h-20"
             />
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-5 grid gap-3 md:grid-cols-3">
