@@ -133,6 +133,30 @@ export default function PlanilhaProjeto() {
     },
   });
 
+  const syncBudgetMonths = useMutation({
+    mutationFn: async (payload: { budgetId: string; months: number }) => {
+      const { error } = await supabase
+        .from("budgets")
+        .update({ months_count: payload.months } as any)
+        .eq("id", payload.budgetId);
+      if (error) throw error;
+      return payload;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budget", activeProjectId] });
+    },
+  });
+
+  useEffect(() => {
+    const months = clampInt(Number((projectQuery.data as any)?.duration_months ?? 12), 1, 120);
+    const budgetMonths = Number(budgetQuery.data?.months_count ?? months);
+    if (!budgetQuery.data?.id) return;
+    if (budgetQuery.isLoading || projectQuery.isLoading) return;
+    if (budgetMonths === months) return;
+
+    syncBudgetMonths.mutate({ budgetId: budgetQuery.data.id, months });
+  }, [budgetQuery.data?.id, budgetQuery.data?.months_count, budgetQuery.isLoading, projectQuery.data, projectQuery.isLoading]);
+
   const categoriesQuery = useQuery({
     queryKey: ["planilhaCats", budgetQuery.data?.id],
     enabled: Boolean(budgetQuery.data?.id),
@@ -161,8 +185,11 @@ export default function PlanilhaProjeto() {
     },
   });
 
-  const monthsCount =
-    budgetQuery.data?.months_count ?? Number((projectQuery.data as any)?.duration_months ?? 12) ?? 12;
+  const monthsCount = clampInt(
+    Number((projectQuery.data as any)?.duration_months ?? budgetQuery.data?.months_count ?? 12),
+    1,
+    120
+  );
   const monthCols = useMemo(() => buildMonthLabels(monthsCount), [monthsCount]);
 
   const [newItemCode, setNewItemCode] = useState<string>("");

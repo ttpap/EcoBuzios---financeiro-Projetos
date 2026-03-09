@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppStore } from "@/lib/appStore";
-import type { Budget, BudgetCategory, BudgetLine, Transaction } from "@/lib/supabaseTypes";
+import type { Budget, BudgetCategory, BudgetLine, Project, Transaction } from "@/lib/supabaseTypes";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import { ExecucaoLancamentosDialog } from "@/components/execucao/ExecucaoLancamentosDialog";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function clampInt(v: number, min: number, max: number) {
+  if (!Number.isFinite(v)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(v)));
+}
 
 function buildMonthLabels(monthsCount: number) {
   return Array.from({ length: monthsCount }, (_, i) => ({ idx: i + 1, label: `Mês ${i + 1}` }));
@@ -34,7 +39,23 @@ function plannedMonthAmount(line: BudgetLine, monthIndex1: number) {
 }
 
 export default function ExecucaoProjeto() {
+  const queryClient = useQueryClient();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+
+  const projectQuery = useQuery({
+    queryKey: ["project", activeProjectId],
+    enabled: Boolean(activeProjectId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", activeProjectId)
+        .is("deleted_at", null)
+        .single();
+      if (error) throw error;
+      return data as Project;
+    },
+  });
 
   const budgetQuery = useQuery({
     queryKey: ["budget", activeProjectId],
@@ -50,6 +71,23 @@ export default function ExecucaoProjeto() {
       return (data?.[0] as Budget | undefined) ?? null;
     },
   });
+
+  useEffect(() => {
+    if (!budgetQuery.data?.id) return;
+    if (budgetQuery.isLoading || projectQuery.isLoading) return;
+
+    const months = clampInt(Number((projectQuery.data as any)?.duration_months ?? 12), 1, 120);
+    const budgetMonths = clampInt(Number(budgetQuery.data?.months_count ?? months), 1, 120);
+    if (months === budgetMonths) return;
+
+    supabase
+      .from("budgets")
+      .update({ months_count: months } as any)
+      .eq("id", budgetQuery.data.id)
+      .then(({ error }) => {
+        if (!error) queryClient.invalidateQueries({ queryKey: ["budget", activeProjectId] });
+      });
+  }, [budgetQuery.data?.id, budgetQuery.data?.months_count, budgetQuery.isLoading, projectQuery.data, projectQuery.isLoading]);
 
   const categoriesQuery = useQuery({
     queryKey: ["execCats", budgetQuery.data?.id],
@@ -94,7 +132,11 @@ export default function ExecucaoProjeto() {
     },
   });
 
-  const monthsCount = budgetQuery.data?.months_count ?? 12;
+  const monthsCount = clampInt(
+    Number((projectQuery.data as any)?.duration_months ?? budgetQuery.data?.months_count ?? 12),
+    1,
+    120
+  );
   const monthCols = useMemo(() => buildMonthLabels(monthsCount), [monthsCount]);
 
   const executedAgg = useMemo(() => {

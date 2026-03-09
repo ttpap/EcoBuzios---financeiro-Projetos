@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/appStore";
 import { supabase } from "@/integrations/supabase/client";
-import type { Budget, BudgetCategory, BudgetLine } from "@/lib/supabaseTypes";
+import type { Budget, BudgetCategory, BudgetLine, Project } from "@/lib/supabaseTypes";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,21 @@ export default function Balancete() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const activeBudgetId = useAppStore((s) => s.activeBudgetId);
   const [q, setQ] = useState("");
+
+  const projectQuery = useQuery({
+    queryKey: ["project", activeProjectId],
+    enabled: Boolean(activeProjectId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("id", activeProjectId)
+        .is("deleted_at", null)
+        .single();
+      if (error) throw error;
+      return data as Project;
+    },
+  });
 
   const budgetQuery = useQuery({
     queryKey: ["budget", activeProjectId, activeBudgetId],
@@ -120,7 +135,7 @@ export default function Balancete() {
     },
   });
 
-  const monthsCount = budgetQuery.data?.months_count ?? 12;
+  const monthsCount = Number((projectQuery.data as any)?.duration_months ?? budgetQuery.data?.months_count ?? 12) ?? 12;
   const startMonth = (budgetQuery.data as any)?.start_month
     ? String((budgetQuery.data as any).start_month).slice(0, 7)
     : new Date().toISOString().slice(0, 7);
