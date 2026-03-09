@@ -373,6 +373,15 @@ export default function BalanceteRelatorios() {
       "% Executado": formatPercent(r.pct),
     }));
 
+    rows.push({
+      Codigo: "",
+      "Item/Subitem": "TOTAL GERAL DO PROJETO",
+      Planejado: plannedTotal,
+      Executado: executedTotal,
+      Saldo: plannedTotal - executedTotal,
+      "% Executado": plannedTotal > 0 ? formatPercent(executedTotal / plannedTotal) : "0%",
+    } as any);
+
     downloadXlsxWithSheets("relatorio-rubricas.xlsx", [
       { name: "Resumo", rows: summary as any },
       { name: "Rubricas", rows: rows as any },
@@ -380,20 +389,35 @@ export default function BalanceteRelatorios() {
   };
 
   const exportLancamentosXlsx = () => {
+    const totalPago = lancamentosRows.reduce((acc, r) => acc + r.valor, 0);
+
     downloadXlsxFromRows(
       "relatorio-lancamentos.xlsx",
       "Lancamentos",
-      lancamentosRows.map((r) => ({
-        Subitem: r.codigo,
-        Descricao: r.descricao,
-        Fornecedor: r.fornecedor,
-        "CNPJ/CPF": r.cnpj_cpf,
-        "Forma de pagamento": r.forma_pagamento,
-        "Data pagamento": r.data_pagamento,
-        "Nº Nota": r.numero_documento,
-        "Data Nota": r.data_nota,
-        Valor: r.valor,
-      }))
+      [
+        ...lancamentosRows.map((r) => ({
+          Subitem: r.codigo,
+          Descricao: r.descricao,
+          Fornecedor: r.fornecedor,
+          "CNPJ/CPF": r.cnpj_cpf,
+          "Forma de pagamento": r.forma_pagamento,
+          "Data pagamento": r.data_pagamento,
+          "Nº Nota": r.numero_documento,
+          "Data Nota": r.data_nota,
+          Valor: r.valor,
+        })),
+        {
+          Subitem: "",
+          Descricao: "TOTAL PAGO NO PROJETO",
+          Fornecedor: "",
+          "CNPJ/CPF": "",
+          "Forma de pagamento": "",
+          "Data pagamento": "",
+          "Nº Nota": "",
+          "Data Nota": "",
+          Valor: totalPago,
+        } as any,
+      ]
     );
   };
 
