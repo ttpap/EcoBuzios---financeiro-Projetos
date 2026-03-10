@@ -139,6 +139,7 @@ async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
 
 export default function Dashboard() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
   const [yearFilter, setYearFilter] = useState<string>("all");
 
   const rollupQuery = useQuery({
@@ -174,6 +175,25 @@ export default function Dashboard() {
       .sort((a, b) => b - a)
       .map(String);
     return years;
+  }, [rollupQuery.data]);
+
+  const projectsByYear = useMemo(() => {
+    const groups = new Map<string, ProjectRollup[]>();
+    for (const p of rollupQuery.data ?? []) {
+      const y = p.executionYear ? String(p.executionYear) : "Sem ano";
+      groups.set(y, [...(groups.get(y) ?? []), p]);
+    }
+
+    const years = Array.from(groups.keys()).sort((a, b) => {
+      if (a === "Sem ano") return 1;
+      if (b === "Sem ano") return -1;
+      return Number(b) - Number(a);
+    });
+
+    return years.map((y) => ({
+      yearLabel: y,
+      projects: (groups.get(y) ?? []).slice().sort((p1, p2) => p2.planned - p1.planned),
+    }));
   }, [rollupQuery.data]);
 
   const donutItems = useMemo(() => {
@@ -257,6 +277,107 @@ export default function Dashboard() {
             title={yearFilter === "all" ? "Participação do saldo por projeto" : `Participação do saldo · ${yearFilter}`}
             subtitle={donutSubtitle}
           />
+        </div>
+      </div>
+
+      <div className="rounded-3xl border bg-white p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">
+              Total arrecadado por projeto
+            </div>
+            <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
+              Orçamento aprovado (planejado), agrupado por Ano de Execução
+            </div>
+          </div>
+          <div className="text-xs text-[hsl(var(--muted-ink))]">
+            Toque em um projeto para selecionar
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-6">
+          {projectsByYear.map((g) => (
+            <div key={g.yearLabel} className="grid gap-3">
+              <div
+                className={cn(
+                  "inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold",
+                  g.yearLabel === "Sem ano"
+                    ? "bg-black/5 text-[hsl(var(--muted-ink))]"
+                    : "bg-[hsl(var(--brand)/0.12)] text-[hsl(var(--brand-strong))]"
+                )}
+              >
+                {g.yearLabel === "Sem ano" ? "Sem Ano de Execução" : `Execução ${g.yearLabel}`}
+                <span className="ml-2 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--ink))]">
+                  {g.projects.length}
+                </span>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {g.projects.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setActiveProjectId(p.id)}
+                    className={cn(
+                      "text-left",
+                      "rounded-3xl border bg-white p-4 shadow-sm transition hover:shadow-md",
+                      activeProjectId === p.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">
+                          {p.name}
+                        </div>
+                        <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
+                          Planejado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(p.planned)}</span>
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          "flex-none rounded-full px-2 py-1 text-xs font-semibold",
+                          activeProjectId === p.id
+                            ? "bg-[hsl(var(--brand))] text-white"
+                            : "bg-[hsl(var(--app-bg))] text-[hsl(var(--ink))]"
+                        )}
+                      >
+                        {activeProjectId === p.id ? "Ativo" : "Selecionar"}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-2">
+                        <div className="text-[hsl(var(--muted-ink))]">Executado</div>
+                        <div className="mt-0.5 font-semibold text-[hsl(var(--ink))]">{formatBRL(p.executed)}</div>
+                      </div>
+                      <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-2">
+                        <div className="text-[hsl(var(--muted-ink))]">Saldo</div>
+                        <div
+                          className={cn(
+                            "mt-0.5 font-semibold",
+                            p.remaining < 0 ? "text-red-600" : "text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {formatBRL(p.remaining)}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+
+                {!g.projects.length ? (
+                  <div className="rounded-3xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
+                    Nenhum projeto.
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ))}
+
+          {!projectsByYear.length ? (
+            <div className="rounded-3xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
+              Nenhum projeto cadastrado.
+            </div>
+          ) : null}
         </div>
       </div>
 
