@@ -354,56 +354,57 @@ export function ExecucaoLancamentosDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl rounded-3xl">
+        <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto rounded-3xl">
           <DialogHeader>
             <DialogTitle>
               Lançamentos — {line?.code || ""} {line?.name || ""} · Mês {currentMonthIndex}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4">
             <Card className="rounded-3xl border bg-white p-4">
-              <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total do mês</div>
-              <div className="mt-1 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-                {formatBRL(monthTotal)}
-              </div>
-
-              {editing && (
-                <div className="mt-3 flex items-center justify-between rounded-2xl border bg-[hsl(var(--app-bg))] px-3 py-2">
-                  <div className="text-xs text-[hsl(var(--muted-ink))]">
-                    Editando lançamento: <span className="font-medium text-[hsl(var(--ink))]">{editing.id.slice(0, 8)}</span>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Total do mês</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
+                    {formatBRL(monthTotal)}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-8 rounded-full"
-                    onClick={() => {
-                      setEditing(null);
-                      setVendor(null);
-                      setPaymentMethod("");
-                      setDocumentNumber("");
-                      setDueDate("");
-                      setPaidDate("");
-                      setAmount("");
-                      setNotes("");
-                      setFile(null);
-                      setEditingMonthIndex(currentMonthIndex);
-                    }}
-                  >
-                    <X className="mr-2 h-4 w-4" />
-                    Sair da edição
-                  </Button>
                 </div>
-              )}
+
+                {editing && (
+                  <div className="rounded-2xl border bg-[hsl(var(--app-bg))] px-3 py-2">
+                    <div className="text-xs text-[hsl(var(--muted-ink))]">
+                      Editando lançamento: <span className="font-medium text-[hsl(var(--ink))]">{editing.id.slice(0, 8)}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2 h-8 rounded-full"
+                      onClick={() => {
+                        setEditing(null);
+                        setVendor(null);
+                        setPaymentMethod("");
+                        setDocumentNumber("");
+                        setDueDate("");
+                        setPaidDate("");
+                        setAmount("");
+                        setNotes("");
+                        setFile(null);
+                        setEditingMonthIndex(currentMonthIndex);
+                      }}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Sair da edição
+                    </Button>
+                  </div>
+                )}
+              </div>
 
               <div className="mt-4 grid gap-3">
                 {editing && (
                   <div>
                     <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Mês do lançamento</div>
-                    <Select
-                      value={String(editingMonthIndex)}
-                      onValueChange={(v) => setEditingMonthIndex(Number(v))}
-                    >
+                    <Select value={String(editingMonthIndex)} onValueChange={(v) => setEditingMonthIndex(Number(v))}>
                       <SelectTrigger className="rounded-2xl">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
@@ -440,10 +441,14 @@ export function ExecucaoLancamentosDialog({
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Número do documento</div>
-                  <Input value={documentNumber} onChange={(e) => setDocumentNumber(e.target.value)} className="rounded-2xl" />
+                  <Input
+                    value={documentNumber}
+                    onChange={(e) => setDocumentNumber(e.target.value)}
+                    className="rounded-2xl"
+                  />
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Data de vencimento</div>
                     <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="rounded-2xl" />
@@ -456,12 +461,7 @@ export function ExecucaoLancamentosDialog({
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Valor</div>
-                  <Input
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="rounded-2xl"
-                    inputMode="decimal"
-                  />
+                  <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-2xl" inputMode="decimal" />
                 </div>
 
                 <div>
@@ -471,19 +471,14 @@ export function ExecucaoLancamentosDialog({
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexar Nota Fiscal (PDF)</div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Input
                       type="file"
                       accept="application/pdf"
                       className="rounded-2xl"
                       onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="rounded-2xl"
-                      onClick={() => setFile(null)}
-                    >
+                    <Button type="button" variant="outline" className="h-10 rounded-2xl" onClick={() => setFile(null)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -512,102 +507,110 @@ export function ExecucaoLancamentosDialog({
             </Card>
 
             <Card className="rounded-3xl border bg-white p-4">
-              <div className="text-sm font-semibold text-[hsl(var(--ink))]">Lançamentos do mês</div>
-              <div className="mt-3 grid gap-2">
-                {(txQuery.data ?? []).map((t: any) => (
-                  <div
-                    key={t.id}
-                    className={cn(
-                      "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3",
-                      editing?.id === t.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-[hsl(var(--ink))]">{formatBRL(Number(t.amount ?? 0))}</div>
-                      <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
-                        {t.paid_date ? `Pago em ${t.paid_date}` : ""}
-                        {t.document_number ? ` · Doc: ${t.document_number}` : ""}
-                      </div>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="text-sm font-semibold text-[hsl(var(--ink))]">Lançamentos do mês</div>
+                <div className="text-xs text-[hsl(var(--muted-ink))]">
+                  {txQuery.data?.length ? `${txQuery.data.length} lançamento(s)` : "Nenhum lançamento"}
+                </div>
+              </div>
 
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="h-8 rounded-full"
-                          onClick={() => {
-                            setEditing(t as Transaction);
-                            setPaymentMethod((t.payment_method as any) || "");
-                            setDocumentNumber(t.document_number || "");
-                            setDueDate(t.due_date || "");
-                            setPaidDate(t.paid_date || "");
-                            setAmount(String(t.amount ?? 0).replace(".", ","));
-                            setNotes(t.notes || "");
-                            setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
-                            setFile(null);
+              <div className="mt-3 max-h-[320px] overflow-y-auto pr-1">
+                <div className="grid gap-2">
+                  {(txQuery.data ?? []).map((t: any) => (
+                    <div
+                      key={t.id}
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-2xl border bg-[hsl(var(--app-bg))] p-3",
+                        editing?.id === t.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-[hsl(var(--ink))]">{formatBRL(Number(t.amount ?? 0))}</div>
+                        <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
+                          {t.paid_date ? `Pago em ${t.paid_date}` : ""}
+                          {t.document_number ? ` · Doc: ${t.document_number}` : ""}
+                        </div>
 
-                            const vendorId = String(t.vendor_id || "");
-                            if (vendorId) {
-                              fetchVendorById(vendorId).then((v) => v && setVendor(v));
-                            } else {
-                              setVendor(null);
-                            }
-                          }}
-                        >
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Editar
-                        </Button>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-8 rounded-full"
+                            onClick={() => {
+                              setEditing(t as Transaction);
+                              setPaymentMethod((t.payment_method as any) || "");
+                              setDocumentNumber(t.document_number || "");
+                              setDueDate(t.due_date || "");
+                              setPaidDate(t.paid_date || "");
+                              setAmount(String(t.amount ?? 0).replace(".", ","));
+                              setNotes(t.notes || "");
+                              setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
+                              setFile(null);
 
-                        {t.invoice_file_name && t.invoice_path && (
-                          <>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 rounded-full"
-                              onClick={async () => {
-                                const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                                setPreviewUrl(url);
-                                setPreviewOpen(true);
-                              }}
-                            >
-                              <Eye className="mr-2 h-4 w-4" />
-                              Visualizar
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="h-8 rounded-full"
-                              onClick={async () => {
-                                const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                                downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
-                              }}
-                            >
-                              <Download className="mr-2 h-4 w-4" />
-                              Baixar
-                            </Button>
-                          </>
+                              const vendorId = String(t.vendor_id || "");
+                              if (vendorId) {
+                                fetchVendorById(vendorId).then((v) => v && setVendor(v));
+                              } else {
+                                setVendor(null);
+                              }
+                            }}
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar
+                          </Button>
+
+                          {t.invoice_file_name && t.invoice_path && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full"
+                                onClick={async () => {
+                                  const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                                  setPreviewUrl(url);
+                                  setPreviewOpen(true);
+                                }}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                Visualizar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full"
+                                onClick={async () => {
+                                  const url = await signedUrl.mutateAsync(String(t.invoice_path));
+                                  downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
+                                }}
+                              >
+                                <Download className="mr-2 h-4 w-4" />
+                                Baixar
+                              </Button>
+                            </>
+                          )}
+                        </div>
+
+                        {!t.invoice_path && (
+                          <div className="mt-2 text-xs font-medium text-red-700">Sem PDF anexado.</div>
                         )}
                       </div>
-
-                      {!t.invoice_path && (
-                        <div className="mt-2 text-xs font-medium text-red-700">Sem PDF anexado.</div>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => deleteTx.mutate(t.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => deleteTx.mutate(t.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
+                  ))}
 
-                {!txQuery.data?.length && (
-                  <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
-                    Nenhum lançamento neste mês.
-                  </div>
-                )}
+                  {!txQuery.data?.length && (
+                    <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-4 text-sm text-[hsl(var(--muted-ink))]">
+                      Nenhum lançamento neste mês.
+                    </div>
+                  )}
+                </div>
               </div>
             </Card>
           </div>
