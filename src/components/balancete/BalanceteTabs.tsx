@@ -13,18 +13,19 @@ export function BalanceteTabs() {
 
   return (
     <Card className="rounded-3xl border bg-white p-2 shadow-sm">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {tabs.map((t) => {
           const active = location.pathname === t.to || location.pathname.startsWith(t.to + "/");
           return (
             <Link
               key={t.to}
               to={t.to}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "rounded-full px-3 py-2 text-sm font-medium transition",
+                "shrink-0 rounded-full px-3 py-2 text-sm font-medium transition",
                 active
                   ? "bg-[hsl(var(--brand))] text-white"
-                  : "text-[hsl(var(--ink))] hover:bg-black/5"
+                  : "bg-[hsl(var(--app-bg))] text-[hsl(var(--ink))] hover:bg-black/5"
               )}
             >
               {t.label}

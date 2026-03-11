@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { ExecucaoLancamentosDialog } from "@/components/execucao/ExecucaoLancamentosDialog";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FinancialSplitCard } from "@/components/dashboard/FinancialSplitCard";
+import { PageHeader } from "@/components/app/PageHeader";
 
 function clampInt(v: number, min: number, max: number) {
   if (!Number.isFinite(v)) return min;
@@ -211,19 +213,16 @@ export default function ExecucaoProjeto() {
     return byCat;
   }, [linesQuery.data, executedAgg.byLine]);
 
-  const footerByMonth = useMemo(() => {
-    const totals = monthCols.map((m) => {
+  const monthTotals = useMemo(() => {
+    return monthCols.map((m) => {
       const mk = monthRefFromIndex(m.idx);
       const planned = plannedAgg.byMonth.get(mk) ?? 0;
       const executed = executedAgg.byMonth.get(mk) ?? 0;
       return { mk, planned, executed, remaining: planned - executed };
     });
-    return totals;
   }, [monthCols, plannedAgg.byMonth, executedAgg.byMonth]);
 
-  const [open, setOpen] = useState(false);
-  const [selectedLine, setSelectedLine] = useState<BudgetLine | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<number>(1);
+  const [openCell, setOpenCell] = useState<{ line: BudgetLine; monthIndex1: number } | null>(null);
 
   if (!activeProjectId) {
     return (
@@ -254,21 +253,34 @@ export default function ExecucaoProjeto() {
     <div className="grid gap-6">
       <BalanceteTabs />
 
-      <div className="rounded-3xl border bg-white p-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Execução do Projeto</div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-              Balancete de Execução
-            </h1>
-            <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Planejado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total)}</span> · Executado:{" "}
-              <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(executedAgg.total)}</span> · Saldo:{" "}
-              <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total - executedAgg.total)}</span>
-            </div>
+      <PageHeader
+        badge={
+          <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--brand)/0.12)] px-3 py-1 text-xs font-semibold text-[hsl(var(--brand))]">
+            Execução do Projeto
           </div>
-        </div>
-      </div>
+        }
+        title={projectQuery.data?.name ?? "Balancete de Execução"}
+        description={
+          <>
+            Planejado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total)}</span> · Executado:{" "}
+            <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(executedAgg.total)}</span> · Saldo:{" "}
+            <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(plannedAgg.total - executedAgg.total)}</span>
+          </>
+        }
+        actions={
+          <Button asChild variant="outline" className="rounded-full">
+            <Link to="/projects">Trocar projeto</Link>
+          </Button>
+        }
+      />
+
+      <FinancialSplitCard
+        title="Gráfico do projeto"
+        description="Resumo visual do total planejado, valor executado e saldo restante do projeto selecionado."
+        planned={plannedAgg.total}
+        executed={executedAgg.total}
+        remaining={plannedAgg.total - executedAgg.total}
+      />
 
       <Card className="rounded-3xl border bg-white p-0 shadow-sm">
         <div className="overflow-auto">
@@ -353,9 +365,7 @@ export default function ExecucaoProjeto() {
                                         missingPdf ? "ring-2 ring-red-500/70" : ""
                                       )}
                                       onClick={() => {
-                                        setSelectedLine(l);
-                                        setSelectedMonth(m.idx);
-                                        setOpen(true);
+                                        setOpenCell({ line: l, monthIndex1: m.idx });
                                       }}
                                     >
                                       {formatBRL(display)}
@@ -408,7 +418,7 @@ export default function ExecucaoProjeto() {
               <TableRow className="bg-[hsl(var(--app-bg))]">
                 <TableCell />
                 <TableCell className="font-semibold text-[hsl(var(--ink))]">TOTAL GERAL</TableCell>
-                {footerByMonth.map((m) => (
+                {monthTotals.map((m) => (
                   <TableCell
                     key={m.mk}
                     className={cn(
@@ -436,12 +446,14 @@ export default function ExecucaoProjeto() {
       </Card>
 
       <ExecucaoLancamentosDialog
-        open={open}
-        onOpenChange={setOpen}
+        open={openCell !== null}
+        onOpenChange={(v) => {
+          if (!v) setOpenCell(null);
+        }}
         projectId={activeProjectId}
         budgetId={budgetQuery.data.id}
-        line={selectedLine}
-        monthIndex={selectedMonth}
+        line={openCell?.line}
+        monthIndex={openCell?.monthIndex1}
         monthsCount={monthsCount}
       />
     </div>

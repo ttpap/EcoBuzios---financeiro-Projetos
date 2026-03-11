@@ -28,9 +28,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { FolderKanban, Pencil, Plus, Trash2, Table2 } from "lucide-react";
+import { BarChart3, FolderKanban, Pencil, Plus, Trash2, Table2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ProjectLogoUploader } from "@/components/projects/ProjectLogoUploader";
+import { PageHeader } from "@/components/app/PageHeader";
 
 function clampInt(v: number, min: number, max: number) {
   if (!Number.isFinite(v)) return min;
@@ -171,7 +172,7 @@ export default function Projects() {
     onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
   });
 
-  const grouped = useMemo(() => {
+  const groupedProjects = useMemo(() => {
     const arr = projectsQuery.data ?? [];
     const groups = new Map<string, Project[]>();
 
@@ -199,21 +200,21 @@ export default function Projects() {
 
   return (
     <div className="grid gap-6">
-      <div className="rounded-3xl border bg-white p-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--brand)/0.12)] px-3 py-1 text-xs font-medium text-[hsl(var(--brand))]">
-              <FolderKanban className="h-3.5 w-3.5" />
-              Projetos
-            </div>
-            <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-              Projetos
-            </h1>
-            <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Agora os projetos ficam agrupados por <span className="font-semibold text-[hsl(var(--ink))]">Ano de Execução</span>.
-            </p>
+      <PageHeader
+        badge={
+          <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--brand)/0.12)] px-3 py-1 text-xs font-semibold text-[hsl(var(--brand))]">
+            <FolderKanban className="h-3.5 w-3.5" />
+            Projetos
           </div>
-
+        }
+        title="Projetos"
+        description={
+          <>
+            Organize por <span className="font-semibold text-[hsl(var(--ink))]">Ano de Execução</span>, selecione o projeto ativo e
+            acesse rapidamente o módulo de execução.
+          </>
+        }
+        actions={
           <Dialog
             open={open}
             onOpenChange={(v) => {
@@ -259,176 +260,172 @@ export default function Projects() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Número do projeto</div>
-                  <Input
-                    value={projectNumber}
-                    onChange={(e) => setProjectNumber(e.target.value)}
-                    className="rounded-2xl"
-                  />
-                </div>
-
-                <div>
-                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Nome</div>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-2xl" />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Número (opcional)</div>
+                    <Input value={projectNumber} onChange={(e) => setProjectNumber(e.target.value)} className="rounded-2xl" />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Nome do projeto</div>
+                    <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-2xl" />
+                  </div>
                 </div>
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Descrição (opcional)</div>
-                  <Textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="rounded-2xl"
-                  />
+                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} className="min-h-[92px] rounded-2xl" />
                 </div>
 
-                <Button
-                  disabled={!name.trim() || !normalizeYear(executionYear) || !Number(durationMonths) || createProject.isPending || updateProject.isPending}
-                  onClick={() => (isEditing ? updateProject.mutate() : createProject.mutate())}
-                  className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-                >
-                  {isEditing ? "Salvar" : "Criar"}
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2 pt-2">
+                  <Button variant="outline" className="rounded-full" onClick={() => setOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={() => (editing ? updateProject.mutate() : createProject.mutate())}
+                    disabled={!name.trim() || !executionYear.trim() || createProject.isPending || updateProject.isPending}
+                    className="rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+                  >
+                    {editing ? "Salvar" : "Criar projeto"}
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="grid gap-6">
-        {grouped.map((g) => (
-          <div key={g.yearLabel} className="grid gap-3">
-            <div className="flex items-end justify-between">
-              <div>
-                <div
-                  className={cn(
-                    "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
-                    g.yearLabel === "Sem ano"
-                      ? "bg-black/5 text-[hsl(var(--muted-ink))]"
-                      : "bg-[hsl(var(--brand)/0.12)] text-[hsl(var(--brand-strong))]"
-                  )}
-                >
-                  {g.yearLabel === "Sem ano" ? "Sem Ano de Execução" : `Execução ${g.yearLabel}`}
-                  <span className="ml-2 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-bold text-[hsl(var(--ink))]">
-                    {g.projects.length}
-                  </span>
+      <div className="grid gap-4">
+        {groupedProjects.map((group) => (
+          <div key={group.yearLabel} className="grid gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[hsl(var(--ink))] ring-1 ring-black/5">
+                  {group.yearLabel === "Sem ano" ? "Sem Ano de Execução" : `Execução ${group.yearLabel}`}
                 </div>
+                <div className="text-xs text-[hsl(var(--muted-ink))]">{group.projects.length} projeto(s)</div>
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
-              {g.projects.map((p: any) => (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {group.projects.map((p) => (
                 <Card
                   key={p.id}
                   className={cn(
-                    "group rounded-3xl border bg-white p-5 shadow-sm transition",
-                    activeProjectId === p.id
-                      ? "ring-2 ring-[hsl(var(--brand)/0.35)]"
-                      : "hover:shadow-md"
+                    "rounded-3xl border bg-white p-5 shadow-sm transition",
+                    "hover:shadow-md",
+                    activeProjectId === p.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-[hsl(var(--muted-ink))]">
-                        <span>
-                          {p.project_number ? `#${p.project_number}` : ""} {p.duration_months ?? 12} meses
-                        </span>
-                        <span className="h-1 w-1 rounded-full bg-black/20" />
-                        <span className="rounded-full bg-black/5 px-2 py-0.5 font-medium text-[hsl(var(--ink))]">
-                          {p.execution_year ? `Execução ${p.execution_year}` : "Definir ano"}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <div className="truncate text-base font-semibold tracking-tight text-[hsl(var(--ink))]">
+                          {p.name}
+                        </div>
+                        {activeProjectId === p.id ? (
+                          <span className="shrink-0 rounded-full bg-[hsl(var(--brand))] px-2 py-1 text-[10px] font-semibold text-white">
+                            Ativo
+                          </span>
+                        ) : null}
                       </div>
-
-                      <div className="mt-1 text-lg font-semibold tracking-tight text-[hsl(var(--ink))]">
-                        {p.name}
-                      </div>
-                      {p.description ? (
-                        <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">{p.description}</div>
-                      ) : null}
-
-                      <div className="mt-4">
-                        <ProjectLogoUploader project={p as any} />
+                      <div className="mt-1 text-xs text-[hsl(var(--muted-ink))]">
+                        {p.project_number ? `#${p.project_number} · ` : ""}
+                        {Number(p.duration_months ?? 12)} meses
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex flex-col gap-2">
-                      <Button
-                        variant={activeProjectId === p.id ? "default" : "outline"}
-                        className={cn(
-                          "rounded-full",
-                          activeProjectId === p.id
-                            ? "bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-                            : ""
-                        )}
-                        onClick={() => setActiveProjectId(p.id)}
-                      >
-                        {activeProjectId === p.id ? "Ativo" : "Selecionar"}
-                      </Button>
+                  <div className="mt-4">
+                    <ProjectLogoUploader project={p} />
+                  </div>
 
-                      <Button asChild variant="outline" className="rounded-full">
-                        <Link to="/balancete">
-                          <Table2 className="mr-2 h-4 w-4" />
-                          Balancete PRO
-                        </Link>
-                      </Button>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant={activeProjectId === p.id ? "default" : "outline"}
+                      className={cn(
+                        "rounded-full",
+                        activeProjectId === p.id
+                          ? "bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+                          : ""
+                      )}
+                      onClick={() => setActiveProjectId(p.id)}
+                    >
+                      {activeProjectId === p.id ? "Projeto ativo" : "Selecionar"}
+                    </Button>
 
-                      <Button
-                        variant="outline"
-                        className="rounded-full"
-                        onClick={() => {
-                          setEditing(p as Project);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Editar
-                      </Button>
+                    <Button asChild variant="outline" className="rounded-full">
+                      <Link to="/balancete" onClick={() => setActiveProjectId(p.id)}>
+                        <Table2 className="mr-2 h-4 w-4" />
+                        Abrir Balancete
+                      </Link>
+                    </Button>
 
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="outline" className="rounded-full">
-                            <Trash2 className="mr-2 h-4 w-4" />
+                    <Button asChild variant="outline" className="rounded-full">
+                      <Link to="/dashboard" onClick={() => setActiveProjectId(p.id)}>
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Dashboard
+                      </Link>
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Dialog
+                      open={open && editing?.id === p.id}
+                      onOpenChange={(v) => {
+                        if (!v) setEditing(null);
+                      }}
+                    />
+
+                    <Button
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() => {
+                        setEditing(p);
+                        setOpen(true);
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Editar
+                    </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="rounded-full">
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Excluir
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="rounded-3xl">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir projeto</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja excluir <span className="font-semibold">{p.name}</span>?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="rounded-full">Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="rounded-full bg-red-600 text-white hover:bg-red-700"
+                            onClick={() => deleteProject.mutate(p.id)}
+                          >
                             Excluir
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-3xl">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir projeto?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta ação remove o projeto da sua lista (exclusão lógica).
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="rounded-full">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="rounded-full bg-red-600 text-white hover:bg-red-700"
-                              onClick={() => deleteProject.mutate(p.id)}
-                            >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </Card>
               ))}
-
-              {!g.projects.length && (
-                <div className="rounded-3xl border bg-white p-6 text-sm text-[hsl(var(--muted-ink))]">
-                  Nenhum projeto neste ano.
-                </div>
-              )}
             </div>
           </div>
         ))}
-
-        {!grouped.length && (
-          <div className="rounded-3xl border bg-white p-6 text-sm text-[hsl(var(--muted-ink))]">
-            Crie seu primeiro projeto para começar.
-          </div>
-        )}
       </div>
+
+      {!groupedProjects.length ? (
+        <div className="rounded-3xl border bg-white p-6 text-sm text-[hsl(var(--muted-ink))]">
+          Nenhum projeto cadastrado ainda.
+        </div>
+      ) : null}
     </div>
   );
 }
