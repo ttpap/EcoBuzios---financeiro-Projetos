@@ -13,7 +13,6 @@ import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
-import { PageHeader } from "@/components/app/PageHeader";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,8 +58,8 @@ function nextSubitemCode(itemCode: number, existingCodes: Array<string | null | 
     const s = String(c ?? "").trim();
     if (!s.startsWith(prefix)) continue;
     const tail = s.slice(prefix.length);
-    const n = Number(tail);
-    if (Number.isFinite(n)) max = Math.max(max, n);
+    const n = Number(tail.split(".")[0]);
+    if (Number.isFinite(n)) max = Math.max(max, Math.trunc(n));
   }
   return `${itemCode}.${max + 1}`;
 }
@@ -434,65 +433,57 @@ export default function PlanilhaProjeto() {
     <div className="grid gap-6">
       <BalanceteTabs />
 
-      <PageHeader
-        badge={
-          <div className="inline-flex items-center gap-2 rounded-full bg-[hsl(var(--brand)/0.12)] px-3 py-1 text-xs font-semibold text-[hsl(var(--brand))]">
-            Balancete PRO
-          </div>
-        }
-        title={projectQuery.data?.name ?? "Balancete PRO"}
-        description={
-          <>
-            {projectQuery.data?.project_number ? `#${(projectQuery.data as any).project_number} · ` : ""}
-            {monthsCount} meses
-          </>
-        }
-        actions={
-          <Button variant="outline" className="rounded-full" onClick={() => navigate("/projects")}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-        }
-      />
-
-      <Card className="rounded-3xl border bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+      <div className="rounded-3xl border bg-white p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">Adicionar item</div>
-            <div className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
-              Crie um item (categoria) para organizar rubricas e subitens do orçamento.
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => navigate("/projects")}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </Button>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
+              Balancete PRO
+            </h1>
+            <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
+              {projectQuery.data?.project_number
+                ? `#${(projectQuery.data as any).project_number} · `
+                : ""}
+              {projectQuery.data?.name} · {monthsCount} meses
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Código do item</div>
+              <Input
+                value={newItemCode}
+                onChange={(e) => setNewItemCode(e.target.value)}
+                className="h-10 w-28 rounded-full"
+                inputMode="numeric"
+              />
             </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Descrição do item</div>
+              <Input
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="h-10 w-64 rounded-full"
+              />
+            </div>
+            <Button
+              onClick={() => addItem.mutate()}
+              disabled={!newItemCode.trim() || !newItemName.trim() || addItem.isPending}
+              className="h-10 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Criar Item
+            </Button>
           </div>
         </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-[160px_1fr_auto] md:items-end">
-          <div>
-            <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Código do item</div>
-            <Input
-              value={newItemCode}
-              onChange={(e) => setNewItemCode(e.target.value)}
-              className="h-10 rounded-full"
-              inputMode="numeric"
-            />
-          </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Descrição do item</div>
-            <Input
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-              className="h-10 rounded-full"
-            />
-          </div>
-          <Button
-            onClick={() => addItem.mutate()}
-            disabled={!newItemCode.trim() || !newItemName.trim() || addItem.isPending}
-            className="h-10 rounded-full bg-[hsl(var(--brand))] text-white hover:bg-[hsl(var(--brand-strong))]"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Criar item
-          </Button>
-        </div>
-      </Card>
+      </div>
 
       <Card className="rounded-3xl border bg-white p-0 shadow-sm">
         <div className="overflow-auto">
