@@ -26,6 +26,13 @@ export function parsePtBrMoneyToNumber(input: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+export function formatPtBrDecimal(value: number, fractionDigits = 2) {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value ?? 0);
+}
+
 export function formatBRL(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",

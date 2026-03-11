@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
+import { formatBRL, formatPtBrDecimal, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { VendorCombobox } from "@/components/execucao/VendorCombobox";
 import { cn } from "@/lib/utils";
@@ -145,7 +145,7 @@ export function ExecucaoLancamentosDialog({
       setDocumentNumber(t.document_number || "");
       setDueDate(t.due_date || "");
       setPaidDate(t.paid_date || "");
-      setAmount(String(t.amount ?? 0).replace(".", ","));
+      setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
       setNotes(t.notes || "");
       setEditingMonthIndex(Number(t.month_index ?? monthIndex));
       setFile(null);
@@ -461,7 +461,18 @@ export function ExecucaoLancamentosDialog({
 
                 <div>
                   <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Valor</div>
-                  <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-2xl" inputMode="decimal" />
+                  <Input
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    onBlur={() => {
+                      if (!amount.trim()) return;
+                      const n = parsePtBrMoneyToNumber(amount);
+                      setAmount(formatPtBrDecimal(n));
+                    }}
+                    className="rounded-2xl"
+                    inputMode="decimal"
+                    placeholder="Ex: 100,20"
+                  />
                 </div>
 
                 <div>
@@ -542,7 +553,7 @@ export function ExecucaoLancamentosDialog({
                               setDocumentNumber(t.document_number || "");
                               setDueDate(t.due_date || "");
                               setPaidDate(t.paid_date || "");
-                              setAmount(String(t.amount ?? 0).replace(".", ","));
+                              setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
                               setNotes(t.notes || "");
                               setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
                               setFile(null);

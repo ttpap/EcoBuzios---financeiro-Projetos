@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
+import { formatBRL, formatPtBrDecimal, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { ArrowLeft, PlusCircle } from "lucide-react";
 
@@ -193,7 +193,18 @@ export default function BalanceteLinha() {
           </div>
           <div>
             <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Valor</div>
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} className="rounded-2xl" placeholder="Ex: 10.000,00" />
+            <Input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onBlur={() => {
+                if (!amount.trim()) return;
+                const n = parsePtBrMoneyToNumber(amount);
+                setAmount(formatPtBrDecimal(n));
+              }}
+              inputMode="decimal"
+              className="rounded-2xl"
+              placeholder="Ex: 100,20"
+            />
             {amount && parsePtBrMoneyToNumber(amount) > totals.remaining && (
               <div className="mt-1 text-xs text-red-600">Atenção: valor acima do saldo da rubrica.</div>
             )}
