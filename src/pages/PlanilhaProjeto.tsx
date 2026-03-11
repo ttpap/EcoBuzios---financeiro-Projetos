@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { formatBRL, parsePtBrMoneyToNumber } from "@/lib/money";
+import { formatBRL, formatPtBrDecimal, parsePtBrMoneyToNumber } from "@/lib/money";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
@@ -194,6 +194,7 @@ export default function PlanilhaProjeto() {
 
   const [newItemCode, setNewItemCode] = useState<string>("");
   const [newItemName, setNewItemName] = useState<string>("");
+  const [approvedDrafts, setApprovedDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -606,17 +607,30 @@ export default function PlanilhaProjeto() {
 
                           <TableCell className="text-right">
                             <Input
-                              value={String(l.total_approved ?? 0).replace(".", ",")}
+                              value={approvedDrafts[l.id] ?? formatPtBrDecimal(Number(l.total_approved ?? 0))}
                               onChange={(e) =>
-                                updateLine.mutate({
-                                  id: l.id,
-                                  patch: {
-                                    total_approved: parsePtBrMoneyToNumber(e.target.value),
-                                  } as any,
-                                })
+                                setApprovedDrafts((curr) => ({ ...curr, [l.id]: e.target.value }))
                               }
+                              onBlur={(e) => {
+                                const parsed = parsePtBrMoneyToNumber(e.target.value);
+                                const current = Number(l.total_approved ?? 0);
+
+                                setApprovedDrafts((curr) => {
+                                  const next = { ...curr };
+                                  delete next[l.id];
+                                  return next;
+                                });
+
+                                if (parsed !== current) {
+                                  updateLine.mutate({
+                                    id: l.id,
+                                    patch: { total_approved: parsed } as any,
+                                  });
+                                }
+                              }}
                               className="h-9 rounded-full text-right"
                               inputMode="decimal"
+                              placeholder="Ex: 100,20"
                             />
                           </TableCell>
 
