@@ -134,6 +134,40 @@ export function ExecucaoLancamentosDialog({
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [editingMonthIndex, setEditingMonthIndex] = useState<number>(monthIndex);
   const [editingLineId, setEditingLineId] = useState<string>(line?.id ?? "");
+  const [actionTxId, setActionTxId] = useState<string | null>(null);
+
+  function fillFormFromTx(t: any) {
+    setPaymentMethod((t.payment_method as any) || "");
+    setDocumentNumber(t.document_number || "");
+    setDueDate(t.due_date || "");
+    setPaidDate(t.paid_date || "");
+    setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
+    setNotes(t.notes || "");
+    setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
+    setEditingLineId(String(t.budget_line_id || line?.id || ""));
+    setFile(null);
+
+    const vendorId = String(t.vendor_id || "");
+    if (vendorId) {
+      fetchVendorById(vendorId).then((v) => v && setVendor(v));
+    } else {
+      setVendor(null);
+    }
+  }
+
+  function startEditCompletely(t: any) {
+    setActionTxId(null);
+    setEditing(t as Transaction);
+    fillFormFromTx(t);
+  }
+
+  function startCloneTx(t: any) {
+    setActionTxId(null);
+    setEditing(null);
+    const nextMonth = Number(t.month_index ?? currentMonthIndex);
+    if (Number.isFinite(nextMonth) && nextMonth > 0) setCurrentMonthIndex(nextMonth);
+    fillFormFromTx(t);
+  }
 
   useEffect(() => {
     if (!open) {
@@ -149,35 +183,14 @@ export function ExecucaoLancamentosDialog({
       setFile(null);
       setEditingMonthIndex(monthIndex);
       setEditingLineId(line?.id ?? "");
+      setActionTxId(null);
       return;
     }
 
     setCurrentMonthIndex(monthIndex);
     setEditingLineId(line?.id ?? "");
-
-    // Ao abrir, se tiver apenas 1 lançamento, já deixa pronto para editar.
-    const list = txQuery.data ?? [];
-    if (list.length === 1) {
-      const t: any = list[0];
-      setEditing(t as Transaction);
-      setPaymentMethod((t.payment_method as any) || "");
-      setDocumentNumber(t.document_number || "");
-      setDueDate(t.due_date || "");
-      setPaidDate(t.paid_date || "");
-      setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
-      setNotes(t.notes || "");
-      setEditingMonthIndex(Number(t.month_index ?? monthIndex));
-      setEditingLineId(String(t.budget_line_id || line?.id || ""));
-      setFile(null);
-
-      const vendorId = String(t.vendor_id || "");
-      if (vendorId) {
-        fetchVendorById(vendorId).then((v) => v && setVendor(v));
-      } else {
-        setVendor(null);
-      }
-    }
-  }, [open, txQuery.data, monthIndex, line?.id]);
+    setActionTxId(null);
+  }, [open, monthIndex, line?.id]);
 
   const signedUrl = useMutation({
     mutationFn: async (path: string) => {
@@ -598,33 +611,47 @@ export function ExecucaoLancamentosDialog({
                         </div>
 
                         <div className="mt-2 flex flex-wrap gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="h-8 rounded-full"
-                            onClick={() => {
-                              setEditing(t as Transaction);
-                              setPaymentMethod((t.payment_method as any) || "");
-                              setDocumentNumber(t.document_number || "");
-                              setDueDate(t.due_date || "");
-                              setPaidDate(t.paid_date || "");
-                              setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
-                              setNotes(t.notes || "");
-                              setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
-                              setEditingLineId(String(t.budget_line_id || line?.id || ""));
-                              setFile(null);
-
-                              const vendorId = String(t.vendor_id || "");
-                              if (vendorId) {
-                                fetchVendorById(vendorId).then((v) => v && setVendor(v));
-                              } else {
-                                setVendor(null);
-                              }
-                            }}
-                          >
-                            <Pencil className="mr-2 h-4 w-4" />
-                            Editar
-                          </Button>
+                          {editing?.id === t.id ? (
+                            <div className="rounded-full bg-[hsl(var(--brand)/0.12)] px-3 py-1 text-xs font-semibold text-[hsl(var(--brand))]">
+                              Em edição
+                            </div>
+                          ) : actionTxId === t.id ? (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full"
+                                onClick={() => startCloneTx(t)}
+                              >
+                                Clonar lançamento
+                              </Button>
+                              <Button
+                                type="button"
+                                className="h-8 rounded-full bg-[hsl(var(--brand))] px-3 text-white hover:bg-[hsl(var(--brand-strong))]"
+                                onClick={() => startEditCompletely(t)}
+                              >
+                                Editar completamente
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-8 rounded-full"
+                                onClick={() => setActionTxId(null)}
+                              >
+                                Cancelar
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 rounded-full"
+                              onClick={() => setActionTxId(t.id)}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Editar
+                            </Button>
+                          )}
 
                           {t.invoice_file_name && t.invoice_path && (
                             <>
