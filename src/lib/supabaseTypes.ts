@@ -92,3 +92,14 @@ export type Transaction = {
   invoice_path?: string | null;
   invoice_size_bytes?: number | null;
 };
+
+export type TransactionAttachment = {
+  id: string;
+  transaction_id: string;
+  project_id: string;
+  file_name: string;
+  storage_path: string;
+  size_bytes: number | null;
+  mime_type: string | null;
+  created_at: string;
+};

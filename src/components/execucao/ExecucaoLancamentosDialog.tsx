@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { BudgetLine, Transaction, Vendor } from "@/lib/supabaseTypes";
+import type { BudgetLine, Transaction, TransactionAttachment, Vendor } from "@/lib/supabaseTypes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,69 @@ async function fetchVendorById(vendorId: string): Promise<Vendor | null> {
   const { data, error } = await supabase.from("vendors").select("*").eq("id", vendorId).single();
   if (error) return null;
   return (data as Vendor) ?? null;
+}
+
+function safePdfFileName(inputName: string) {
+  const safe = safeFileName(inputName || "anexo.pdf");
+  const noExt = safe.replace(/\.[a-zA-Z0-9]+$/, "");
+  return `${noExt}.pdf`;
+}
+
+async function imageToLowResPdfBytes(file: File): Promise<Uint8Array> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Falha ao ler imagem"));
+      el.src = url;
+    });
+
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Falha ao converter imagem");
+    ctx.drawImage(img, 0, 0, w, h);
+
+    const blob: Blob = await new Promise((resolve) =>
+      canvas.toBlob((b) => resolve(b as Blob), "image/jpeg", 0.6)
+    );
+
+    const jpgBytes = new Uint8Array(await blob.arrayBuffer());
+
+    const pdf = await PDFDocument.create();
+    const jpg = await pdf.embedJpg(jpgBytes);
+    const page = pdf.addPage([jpg.width, jpg.height]);
+    page.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
+
+    const out = await pdf.save({ useObjectStreams: true, addDefaultPage: false });
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function fileToLowResPdf(file: File): Promise<{ bytes: Uint8Array; fileName: string; sizeBytes: number }> {
+  if (file.type === "application/pdf") {
+    const bytes = await compressPdf(file);
+    const fileName = safePdfFileName(file.name || "anexo.pdf");
+    return { bytes, fileName, sizeBytes: bytes.byteLength };
+  }
+
+  if (file.type.startsWith("image/")) {
+    const bytes = await imageToLowResPdfBytes(file);
+    const fileName = safePdfFileName(file.name || "imagem.pdf");
+    return { bytes, fileName, sizeBytes: bytes.byteLength };
+  }
+
+  throw new Error("Formato de anexo não suportado. Envie PDF ou imagem.");
 }
 
 export function ExecucaoLancamentosDialog({
@@ -129,7 +192,7 @@ export function ExecucaoLancamentosDialog({
   const [paidDate, setPaidDate] = useState("");
   const [amount, setAmount] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
 
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [editingMonthIndex, setEditingMonthIndex] = useState<number>(monthIndex);
@@ -145,7 +208,7 @@ export function ExecucaoLancamentosDialog({
     setNotes(t.notes || "");
     setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
     setEditingLineId(String(t.budget_line_id || line?.id || ""));
-    setFile(null);
+    setFiles([]);
 
     const vendorId = String(t.vendor_id || "");
     if (vendorId) {
@@ -180,7 +243,7 @@ export function ExecucaoLancamentosDialog({
       setPaidDate("");
       setAmount("");
       setNotes("");
-      setFile(null);
+      setFiles([]);
       setEditingMonthIndex(monthIndex);
       setEditingLineId(line?.id ?? "");
       setActionTxId(null);
@@ -191,6 +254,97 @@ export function ExecucaoLancamentosDialog({
     setEditingLineId(line?.id ?? "");
     setActionTxId(null);
   }, [open, monthIndex, line?.id]);
+
+  const attachmentsQuery = useQuery({
+    queryKey: ["txAttachments", projectId, txQuery.data?.map((t) => t.id).join("|")],
+    enabled: Boolean(open && (txQuery.data ?? []).length),
+    queryFn: async () => {
+      const ids = (txQuery.data ?? []).map((t) => t.id);
+      const { data, error } = await supabase
+        .from("transaction_attachments")
+        .select("*")
+        .in("transaction_id", ids)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const byTx = new Map<string, TransactionAttachment[]>();
+      for (const row of (data ?? []) as TransactionAttachment[]) {
+        byTx.set(row.transaction_id, [...(byTx.get(row.transaction_id) ?? []), row]);
+      }
+      return byTx;
+    },
+  });
+
+  const addAttachmentsToTx = useMutation({
+    mutationFn: async ({ txId, projectId, files }: { txId: string; projectId: string; files: File[] }) => {
+      if (!files.length) return [] as TransactionAttachment[];
+
+      const uploaded: TransactionAttachment[] = [];
+
+      for (const f of files) {
+        const { bytes, fileName, sizeBytes } = await fileToLowResPdf(f);
+        const path = `${projectId}/${txId}/${Date.now()}-${safeFileName(fileName)}`;
+
+        const { error: upErr } = await supabase.storage
+          .from("invoices")
+          .upload(path, bytes, { contentType: "application/pdf", upsert: false });
+        if (upErr) throw upErr;
+
+        const { data, error } = await supabase
+          .from("transaction_attachments")
+          .insert({
+            transaction_id: txId,
+            project_id: projectId,
+            file_name: fileName,
+            storage_path: path,
+            size_bytes: sizeBytes,
+            mime_type: "application/pdf",
+          } as any)
+          .select("*")
+          .single();
+        if (error) throw error;
+
+        uploaded.push(data as TransactionAttachment);
+      }
+
+      return uploaded;
+    },
+  });
+
+  const removeAttachment = useMutation({
+    mutationFn: async ({ attachment, tx }: { attachment: TransactionAttachment; tx: Transaction }) => {
+      await supabase.storage.from("invoices").remove([attachment.storage_path]);
+      const { error } = await supabase.from("transaction_attachments").delete().eq("id", attachment.id);
+      if (error) throw error;
+
+      // Se removeu o "principal", tenta apontar para outro anexo (ou limpar)
+      if ((tx as any).invoice_path && String((tx as any).invoice_path) === attachment.storage_path) {
+        const { data } = await supabase
+          .from("transaction_attachments")
+          .select("*")
+          .eq("transaction_id", tx.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        const next = (data?.[0] as any) as TransactionAttachment | undefined;
+        await supabase
+          .from("transactions")
+          .update({
+            invoice_path: next?.storage_path ?? null,
+            invoice_file_name: next?.file_name ?? null,
+            invoice_size_bytes: next?.size_bytes ?? null,
+          } as any)
+          .eq("id", tx.id);
+      }
+
+      return attachment.id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["txAttachments"] });
+      queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao remover anexo"),
+  });
 
   const signedUrl = useMutation({
     mutationFn: async (path: string) => {
@@ -214,32 +368,11 @@ export function ExecucaoLancamentosDialog({
       const parsedAmount = parsePtBrMoneyToNumber(amount);
       if (!parsedAmount || parsedAmount <= 0) throw new Error("Informe um valor válido");
 
-      let invoice_path: string | null = null;
-      let invoice_file_name: string | null = null;
-      let invoice_size_bytes: number | null = null;
-
-      if (file) {
-        if (file.type !== "application/pdf") throw new Error("Anexe um PDF");
-
-        const compressed = await compressPdf(file);
-        const safeName = safeFileName(file.name || "nota-fiscal.pdf");
-        const path = `${projectId}/${Date.now()}-${safeName}`;
-
-        const { error: upErr } = await supabase.storage
-          .from("invoices")
-          .upload(path, compressed, { contentType: "application/pdf", upsert: false });
-        if (upErr) throw upErr;
-
-        invoice_path = path;
-        invoice_file_name = safeName;
-        invoice_size_bytes = compressed.byteLength;
-      }
-
       const user = await supabase.auth.getUser();
       const userId = user.data.user?.id;
       if (!userId) throw new Error("Sem sessão");
 
-      const { data, error } = await supabase
+      const { data: tx, error } = await supabase
         .from("transactions")
         .insert({
           project_id: projectId,
@@ -256,14 +389,27 @@ export function ExecucaoLancamentosDialog({
           payment_method: paymentMethod,
           due_date: dueDate || null,
           paid_date: paidDate,
-          invoice_file_name,
-          invoice_path,
-          invoice_size_bytes,
         } as any)
         .select("*")
         .single();
       if (error) throw error;
-      return data as Transaction;
+
+      const uploaded = await addAttachmentsToTx.mutateAsync({ txId: tx.id, projectId, files });
+
+      // Mantém compatibilidade: preenche invoice_* com o primeiro anexo
+      if (uploaded.length) {
+        const first = uploaded[0];
+        await supabase
+          .from("transactions")
+          .update({
+            invoice_file_name: first.file_name,
+            invoice_path: first.storage_path,
+            invoice_size_bytes: first.size_bytes,
+          } as any)
+          .eq("id", tx.id);
+      }
+
+      return tx as Transaction;
     },
     onSuccess: () => {
       toast.success("Lançamento salvo");
@@ -275,9 +421,10 @@ export function ExecucaoLancamentosDialog({
       setPaidDate("");
       setAmount("");
       setNotes("");
-      setFile(null);
+      setFiles([]);
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
+      queryClient.invalidateQueries({ queryKey: ["txAttachments"] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
   });
@@ -301,33 +448,6 @@ export function ExecucaoLancamentosDialog({
       const lines = (linesForSelectQuery.data ?? []).filter((l) => !l.is_subtotal);
       const nextLine = lines.find((l) => l.id === nextLineId);
 
-      let invoice_path: string | null | undefined;
-      let invoice_file_name: string | null | undefined;
-      let invoice_size_bytes: number | null | undefined;
-
-      const oldPath = (editing as any).invoice_path as string | null | undefined;
-
-      if (file) {
-        if (file.type !== "application/pdf") throw new Error("Anexe um PDF");
-
-        const compressed = await compressPdf(file);
-        const safeName = safeFileName(file.name || "nota-fiscal.pdf");
-        const path = `${projectId}/${Date.now()}-${safeName}`;
-
-        const { error: upErr } = await supabase.storage
-          .from("invoices")
-          .upload(path, compressed, { contentType: "application/pdf", upsert: false });
-        if (upErr) throw upErr;
-
-        invoice_path = path;
-        invoice_file_name = safeName;
-        invoice_size_bytes = compressed.byteLength;
-
-        if (oldPath && oldPath !== path) {
-          await supabase.storage.from("invoices").remove([oldPath]);
-        }
-      }
-
       const { data, error } = await supabase
         .from("transactions")
         .update({
@@ -342,14 +462,24 @@ export function ExecucaoLancamentosDialog({
           amount: parsedAmount,
           notes: notes.trim() || null,
           month_index: editingMonthIndex,
-          ...(invoice_path !== undefined
-            ? { invoice_path, invoice_file_name, invoice_size_bytes }
-            : {}),
         } as any)
         .eq("id", editing.id)
         .select("*")
         .single();
       if (error) throw error;
+
+      const uploaded = await addAttachmentsToTx.mutateAsync({ txId: editing.id, projectId, files });
+      if (uploaded.length && !(editing as any).invoice_path) {
+        const first = uploaded[0];
+        await supabase
+          .from("transactions")
+          .update({
+            invoice_file_name: first.file_name,
+            invoice_path: first.storage_path,
+            invoice_size_bytes: first.size_bytes,
+          } as any)
+          .eq("id", editing.id);
+      }
 
       return { tx: data as Transaction, oldMonthIndex, oldLineId, newLineId: nextLineId };
     },
@@ -368,13 +498,14 @@ export function ExecucaoLancamentosDialog({
       );
 
       setEditing(null);
-      setFile(null);
+      setFiles([]);
 
       if (newMonthIndex !== currentMonthIndex) setCurrentMonthIndex(newMonthIndex);
       if (movedLine && onChangeSelectedLineId) onChangeSelectedLineId(newLineId);
 
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
+      queryClient.invalidateQueries({ queryKey: ["txAttachments"] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar"),
   });
@@ -436,7 +567,7 @@ export function ExecucaoLancamentosDialog({
                         setPaidDate("");
                         setAmount("");
                         setNotes("");
-                        setFile(null);
+                        setFiles([]);
                         setEditingMonthIndex(currentMonthIndex);
                         setEditingLineId(line?.id ?? "");
                       }}
@@ -549,17 +680,46 @@ export function ExecucaoLancamentosDialog({
                 </div>
 
                 <div>
-                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexar Nota Fiscal (PDF)</div>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Anexos (PDF ou imagem)</div>
+                  <div className="grid gap-2">
                     <Input
                       type="file"
-                      accept="application/pdf"
+                      accept="application/pdf,image/*"
+                      multiple
                       className="rounded-2xl"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      onChange={(e) => {
+                        const list = Array.from(e.target.files ?? []);
+                        if (!list.length) return;
+                        setFiles((curr) => [...curr, ...list]);
+                        e.currentTarget.value = "";
+                      }}
                     />
-                    <Button type="button" variant="outline" className="h-10 rounded-2xl" onClick={() => setFile(null)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+
+                    {files.length ? (
+                      <div className="rounded-2xl border bg-[hsl(var(--app-bg))] p-3">
+                        <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Arquivos selecionados</div>
+                        <div className="mt-2 grid gap-2">
+                          {files.map((f, idx) => (
+                            <div key={`${f.name}-${idx}`} className="flex items-center justify-between gap-3">
+                              <div className="min-w-0 truncate text-sm font-medium text-[hsl(var(--ink))]">
+                                {f.name}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-8 rounded-full"
+                                onClick={() => setFiles((curr) => curr.filter((_, i) => i !== idx))}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-2 text-xs text-[hsl(var(--muted-ink))]">
+                          Imagens serão convertidas para PDF em baixa resolução automaticamente.
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -653,40 +813,80 @@ export function ExecucaoLancamentosDialog({
                             </Button>
                           )}
 
-                          {t.invoice_file_name && t.invoice_path && (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 rounded-full"
-                                onClick={async () => {
-                                  const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                                  setPreviewUrl(url);
-                                  setPreviewOpen(true);
-                                }}
-                              >
-                                <Eye className="mr-2 h-4 w-4" />
-                                Visualizar
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                className="h-8 rounded-full"
-                                onClick={async () => {
-                                  const url = await signedUrl.mutateAsync(String(t.invoice_path));
-                                  downloadBlobUrl(url, String(t.invoice_file_name || "nota-fiscal.pdf"));
-                                }}
-                              >
-                                <Download className="mr-2 h-4 w-4" />
-                                Baixar
-                              </Button>
-                            </>
-                          )}
-                        </div>
+                          {(() => {
+                            const list = attachmentsQuery.data?.get(t.id) ?? [];
+                            const legacy = t.invoice_path
+                              ? [
+                                  {
+                                    id: "legacy",
+                                    transaction_id: t.id,
+                                    project_id: projectId,
+                                    file_name: String(t.invoice_file_name ?? "nota-fiscal.pdf"),
+                                    storage_path: String(t.invoice_path),
+                                    size_bytes: Number((t as any).invoice_size_bytes ?? 0) || null,
+                                    mime_type: "application/pdf",
+                                    created_at: String((t as any).created_at ?? ""),
+                                  } as TransactionAttachment,
+                                ]
+                              : [];
 
-                        {!t.invoice_path && (
-                          <div className="mt-2 text-xs font-medium text-red-700">Sem PDF anexado.</div>
-                        )}
+                            const merged = list.length ? list : legacy;
+                            if (!merged.length) {
+                              return <div className="mt-2 text-xs font-medium text-red-700">Sem PDF anexado.</div>;
+                            }
+
+                            return (
+                              <div className="mt-2 w-full rounded-2xl border bg-white p-3">
+                                <div className="text-xs font-semibold text-[hsl(var(--ink))]">Anexos ({merged.length})</div>
+                                <div className="mt-2 grid gap-2">
+                                  {merged.map((a) => (
+                                    <div key={a.storage_path} className="flex flex-wrap items-center justify-between gap-2">
+                                      <div className="min-w-0 truncate text-sm text-[hsl(var(--ink))]">{a.file_name}</div>
+                                      <div className="flex flex-wrap gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="h-8 rounded-full"
+                                          onClick={async () => {
+                                            const url = await signedUrl.mutateAsync(String(a.storage_path));
+                                            setPreviewUrl(url);
+                                            setPreviewOpen(true);
+                                          }}
+                                        >
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          Visualizar
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          className="h-8 rounded-full"
+                                          onClick={async () => {
+                                            const url = await signedUrl.mutateAsync(String(a.storage_path));
+                                            downloadBlobUrl(url, String(a.file_name || "anexo.pdf"));
+                                          }}
+                                        >
+                                          <Download className="mr-2 h-4 w-4" />
+                                          Baixar
+                                        </Button>
+                                        {a.id !== "legacy" ? (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            className="h-8 rounded-full"
+                                            onClick={() => removeAttachment.mutate({ attachment: a, tx: t as any })}
+                                          >
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Remover
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
                       </div>
                       <Button
                         variant="outline"
