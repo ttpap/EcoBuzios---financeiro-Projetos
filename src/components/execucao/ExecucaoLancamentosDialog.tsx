@@ -70,6 +70,7 @@ export function ExecucaoLancamentosDialog({
   line,
   monthIndex,
   monthsCount,
+  onChangeSelectedLineId,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -78,11 +79,26 @@ export function ExecucaoLancamentosDialog({
   line: BudgetLine | null;
   monthIndex: number;
   monthsCount: number;
+  onChangeSelectedLineId?: (lineId: string) => void;
 }) {
   const queryClient = useQueryClient();
 
   const [currentMonthIndex, setCurrentMonthIndex] = useState<number>(monthIndex);
   const monthRef = useMemo(() => monthRefFromIndex(currentMonthIndex), [currentMonthIndex]);
+
+  const linesForSelectQuery = useQuery({
+    queryKey: ["execBudgetLines", budgetId],
+    enabled: Boolean(open && budgetId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("budget_lines")
+        .select("id,code,name,is_subtotal")
+        .eq("budget_id", budgetId)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Array<Pick<BudgetLine, "id" | "code" | "name" | "is_subtotal">>;
+    },
+  });
 
   const txQuery = useQuery({
     queryKey: ["execTxMonth", projectId, budgetId, line?.id, monthRef],
@@ -117,6 +133,7 @@ export function ExecucaoLancamentosDialog({
 
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [editingMonthIndex, setEditingMonthIndex] = useState<number>(monthIndex);
+  const [editingLineId, setEditingLineId] = useState<string>(line?.id ?? "");
 
   useEffect(() => {
     if (!open) {
@@ -131,10 +148,12 @@ export function ExecucaoLancamentosDialog({
       setNotes("");
       setFile(null);
       setEditingMonthIndex(monthIndex);
+      setEditingLineId(line?.id ?? "");
       return;
     }
 
     setCurrentMonthIndex(monthIndex);
+    setEditingLineId(line?.id ?? "");
 
     // Ao abrir, se tiver apenas 1 lançamento, já deixa pronto para editar.
     const list = txQuery.data ?? [];
@@ -148,6 +167,7 @@ export function ExecucaoLancamentosDialog({
       setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
       setNotes(t.notes || "");
       setEditingMonthIndex(Number(t.month_index ?? monthIndex));
+      setEditingLineId(String(t.budget_line_id || line?.id || ""));
       setFile(null);
 
       const vendorId = String(t.vendor_id || "");
@@ -157,7 +177,7 @@ export function ExecucaoLancamentosDialog({
         setVendor(null);
       }
     }
-  }, [open, txQuery.data, monthIndex]);
+  }, [open, txQuery.data, monthIndex, line?.id]);
 
   const signedUrl = useMutation({
     mutationFn: async (path: string) => {
@@ -259,6 +279,15 @@ export function ExecucaoLancamentosDialog({
       const parsedAmount = parsePtBrMoneyToNumber(amount);
       if (!parsedAmount || parsedAmount <= 0) throw new Error("Informe um valor válido");
 
+      const oldMonthIndex = Number((editing as any).month_index ?? currentMonthIndex);
+      const oldLineId = String((editing as any).budget_line_id ?? "");
+
+      const nextLineId = String(editingLineId || oldLineId || line?.id || "");
+      if (!nextLineId) throw new Error("Selecione o item (rubrica)");
+
+      const lines = (linesForSelectQuery.data ?? []).filter((l) => !l.is_subtotal);
+      const nextLine = lines.find((l) => l.id === nextLineId);
+
       let invoice_path: string | null | undefined;
       let invoice_file_name: string | null | undefined;
       let invoice_size_bytes: number | null | undefined;
@@ -286,11 +315,11 @@ export function ExecucaoLancamentosDialog({
         }
       }
 
-      const oldMonthIndex = Number((editing as any).month_index ?? currentMonthIndex);
-
       const { data, error } = await supabase
         .from("transactions")
         .update({
+          budget_line_id: nextLineId,
+          description: nextLine?.name ?? (editing as any).description ?? null,
           vendor_id: vendor.id,
           payment_method: paymentMethod,
           document_number: documentNumber.trim() || null,
@@ -309,25 +338,30 @@ export function ExecucaoLancamentosDialog({
         .single();
       if (error) throw error;
 
-      return { tx: data as Transaction, oldMonthIndex };
+      return { tx: data as Transaction, oldMonthIndex, oldLineId, newLineId: nextLineId };
     },
-    onSuccess: ({ tx, oldMonthIndex }) => {
+    onSuccess: ({ tx, oldMonthIndex, oldLineId, newLineId }) => {
       const newMonthIndex = Number((tx as any).month_index ?? editingMonthIndex);
 
+      const movedMonth = newMonthIndex !== oldMonthIndex;
+      const movedLine = newLineId && oldLineId && newLineId !== oldLineId;
+
       toast.success(
-        newMonthIndex !== oldMonthIndex
+        movedMonth
           ? `Lançamento movido para Mês ${newMonthIndex}`
-          : "Lançamento atualizado"
+          : movedLine
+            ? "Lançamento movido para outro item"
+            : "Lançamento atualizado"
       );
 
       setEditing(null);
       setFile(null);
 
-      // Se o mês mudou, navega o modal para o novo mês automaticamente.
       if (newMonthIndex !== currentMonthIndex) setCurrentMonthIndex(newMonthIndex);
+      if (movedLine && onChangeSelectedLineId) onChangeSelectedLineId(newLineId);
 
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
-      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar"),
   });
@@ -344,7 +378,7 @@ export function ExecucaoLancamentosDialog({
     onSuccess: () => {
       toast.success("Lançamento removido");
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
-      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
+      queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
   });
@@ -391,6 +425,7 @@ export function ExecucaoLancamentosDialog({
                         setNotes("");
                         setFile(null);
                         setEditingMonthIndex(currentMonthIndex);
+                        setEditingLineId(line?.id ?? "");
                       }}
                     >
                       <X className="mr-2 h-4 w-4" />
@@ -402,20 +437,40 @@ export function ExecucaoLancamentosDialog({
 
               <div className="mt-4 grid gap-3">
                 {editing && (
-                  <div>
-                    <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Mês do lançamento</div>
-                    <Select value={String(editingMonthIndex)} onValueChange={(v) => setEditingMonthIndex(Number(v))}>
-                      <SelectTrigger className="rounded-2xl">
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: monthsCount }, (_, i) => i + 1).map((m) => (
-                          <SelectItem key={m} value={String(m)}>
-                            Mês {m}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Item (rubrica)</div>
+                      <Select value={editingLineId} onValueChange={(v) => setEditingLineId(v)}>
+                        <SelectTrigger className="rounded-2xl">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(linesForSelectQuery.data ?? [])
+                            .filter((l) => !l.is_subtotal)
+                            .map((l) => (
+                              <SelectItem key={l.id} value={l.id}>
+                                {(l.code ? `${l.code} — ` : "") + l.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-[hsl(var(--muted-ink))]">Mês do lançamento</div>
+                      <Select value={String(editingMonthIndex)} onValueChange={(v) => setEditingMonthIndex(Number(v))}>
+                        <SelectTrigger className="rounded-2xl">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: monthsCount }, (_, i) => i + 1).map((m) => (
+                            <SelectItem key={m} value={String(m)}>
+                              Mês {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
 
@@ -556,6 +611,7 @@ export function ExecucaoLancamentosDialog({
                               setAmount(formatPtBrDecimal(Number(t.amount ?? 0)));
                               setNotes(t.notes || "");
                               setEditingMonthIndex(Number(t.month_index ?? currentMonthIndex));
+                              setEditingLineId(String(t.budget_line_id || line?.id || ""));
                               setFile(null);
 
                               const vendorId = String(t.vendor_id || "");

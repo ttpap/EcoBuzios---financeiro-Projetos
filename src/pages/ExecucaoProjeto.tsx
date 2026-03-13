@@ -443,6 +443,10 @@ export default function ExecucaoProjeto() {
         line={selectedLine}
         monthIndex={selectedMonth}
         monthsCount={monthsCount}
+        onChangeSelectedLineId={(lineId) => {
+          const next = (linesQuery.data ?? []).find((l) => l.id === lineId) ?? null;
+          if (next) setSelectedLine(next);
+        }}
       />
     </div>
   );
