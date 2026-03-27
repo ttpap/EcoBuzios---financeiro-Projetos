@@ -11,7 +11,7 @@ import {
 } from "@/lib/dashboardApi";
 import { toast } from "sonner";
 
-export function useDashboardData(yearFilter: string) {
+export function useDashboardData(yearFilter: string, statusFilter: string) {
   const queryClient = useQueryClient();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
 
@@ -58,8 +58,11 @@ export function useDashboardData(yearFilter: string) {
   }, [rollupQuery.data]);
 
   const projectsByYear = useMemo(() => {
+    const source = (rollupQuery.data ?? []).filter(
+      (p) => statusFilter === "all" || p.status === statusFilter
+    );
     const groups = new Map<string, ProjectRollup[]>();
-    for (const p of rollupQuery.data ?? []) {
+    for (const p of source) {
       const y = p.executionYear ? String(p.executionYear) : "Sem ano";
       groups.set(y, [...(groups.get(y) ?? []), p]);
     }
@@ -74,17 +77,19 @@ export function useDashboardData(yearFilter: string) {
       yearLabel: y,
       projects: (groups.get(y) ?? []).slice().sort((p1, p2) => p2.planned - p1.planned),
     }));
-  }, [rollupQuery.data]);
+  }, [rollupQuery.data, statusFilter]);
 
   const donutItems = useMemo(() => {
-    const list = rollupQuery.data ?? [];
+    const list = (rollupQuery.data ?? []).filter(
+      (p) => statusFilter === "all" || p.status === statusFilter
+    );
     const filtered =
       yearFilter === "all"
         ? list
         : list.filter((p) => String(p.executionYear ?? "Sem ano") === yearFilter);
 
     return filtered.map((p) => ({ id: p.id, name: p.name, value: Math.max(0, p.remaining) }));
-  }, [rollupQuery.data, yearFilter]);
+  }, [rollupQuery.data, yearFilter, statusFilter]);
 
   const donutSubtitle = useMemo(() => {
     if (yearFilter === "all") return "Saldo (Planejado − Executado) de cada projeto, considerando todos os anos";
