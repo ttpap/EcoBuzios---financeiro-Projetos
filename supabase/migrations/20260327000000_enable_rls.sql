@@ -1,0 +1,36 @@
+-- Migration: enable_rls
+-- Verificado em: 2026-03-27
+-- Projeto Supabase: pttidjztgnqcyrsreygn (EcoBuzios - Prestação de contas)
+--
+-- Estado verificado via MCP: todas as tabelas já possuem RLS habilitado
+-- e policies existentes. Nenhuma ação de ALTER TABLE necessária.
+--
+-- Tabelas verificadas com rowsecurity = TRUE e policies ativas:
+--   alertas_orcamentarios  → policies: select/insert/update/delete (_own)
+--   auditoria_log          → policies: select/insert (_own)
+--   budget_categories      → policies: select/insert/update/delete (_own + _owner)
+--   budget_lines           → policies: select/insert/update/delete (_own + _owner)
+--   budgets                → policies: select/insert/update/delete (_own + _project_owner)
+--   imports                → policies: select/insert/update/delete (_own + _owner)
+--   lancamentos_financeiros → policies: select/insert/update/delete (_own)
+--   orcamentos_importados  → policies: select/insert/update/delete (_own)
+--   profiles               → policies: select/insert/update/delete (_own)
+--   projects               → policies: select/insert/update/delete (_own)
+--   rubricas_orcamento     → policies: select/insert/update/delete (_own)
+--   transaction_attachments → policies: select/insert/update/delete (_owner)
+--   transactions           → policies: select/insert/update/delete (_own + _owner)
+--   vendors                → policies: select/insert/update/delete (_own)
+--
+-- NOTA: As policies existentes usam filtragem por user_id (owner/own),
+-- adequada para app multi-usuário. A policy genérica "acesso_autenticado"
+-- (FOR ALL TO authenticated USING (true)) NÃO foi adicionada pois conflitaria
+-- com as policies granulares já existentes.
+--
+-- Este arquivo serve como documentação do estado de segurança na data acima.
+
+-- No-op: RLS já está habilitado em todas as tabelas.
+-- Se novas tabelas forem criadas, usar o padrão:
+--
+--   ALTER TABLE public.<nova_tabela> ENABLE ROW LEVEL SECURITY;
+--   CREATE POLICY "acesso_autenticado" ON public.<nova_tabela>
+--     FOR ALL TO authenticated USING (true);
