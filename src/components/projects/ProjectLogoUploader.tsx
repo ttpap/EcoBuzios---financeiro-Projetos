@@ -84,7 +84,7 @@ export function ProjectLogoUploader({ project }: { project: Project }) {
   return (
     <div className="flex items-start gap-4">
       {/* Moldura da logo */}
-      <div className="flex h-32 w-32 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-black/10 bg-[hsl(var(--app-bg))] transition hover:border-[hsl(var(--brand)/0.4)]">
+      <div className="flex h-32 w-32 flex-none items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 transition hover:border-[hsl(var(--brand)/0.5)]">
         {logoUrl ? (
           <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1.5" />
         ) : (
