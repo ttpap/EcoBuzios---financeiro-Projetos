@@ -31,12 +31,10 @@ export function AppShell({ children }: PropsWithChildren) {
       <header className="sticky top-0 z-30 border-b bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-6">
           <Link to="/dashboard" className="group flex items-center gap-2">
-            <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[hsl(var(--brand))] text-white shadow-sm">
-              <Table2 className="h-5 w-5" />
-            </div>
+            <img src="/favicon.png" alt="EcoBúzios" className="h-10 w-auto" />
             <div className="leading-tight">
               <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">
-                Balancete Pro
+                EcoBúzios
               </div>
               <div className="text-xs text-[hsl(var(--muted-ink))]">
                 Orçamento • Execução • Relatórios
