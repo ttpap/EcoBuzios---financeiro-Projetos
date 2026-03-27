@@ -24,6 +24,7 @@ export type ProjectRollup = {
   planned: number;
   executed: number;
   remaining: number;
+  status: string; // "ativo" | "pausado" | "finalizado"
 };
 
 export async function fetchActiveBudget(projectId: string) {
@@ -62,12 +63,12 @@ export async function fetchDashboardTotals(projectId: string, budgetId: string):
 export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
   const { data: projects, error: pErr } = await supabase
     .from("projects")
-    .select("id,name,execution_year,created_at")
+    .select("id,name,execution_year,status,created_at")
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (pErr) throw pErr;
 
-  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null }>;
+  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null; status: string | null }>;
   if (!list.length) return [];
 
   const projectIds = list.map((p) => p.id);
@@ -132,6 +133,15 @@ export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
       planned,
       executed,
       remaining: planned - executed,
+      status: p.status ?? "ativo",
     };
   });
+}
+
+export async function updateProjectStatus(projectId: string, status: string): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ status } as any)
+    .eq("id", projectId);
+  if (error) throw error;
 }
