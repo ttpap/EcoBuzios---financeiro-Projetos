@@ -559,13 +559,13 @@ export default function PlanilhaProjeto() {
                       </TableCell>
                     </TableRow>
 
-                    {lines.map((l) => {
+                    {lines.map((l, lineIdx) => {
                       const start = clampInt(Number(l.start_month ?? 1), 1, monthsCount);
                       const end = clampInt(Number((l as BudgetLine).end_month ?? start), 1, monthsCount);
                       const invalid = end < start || end > monthsCount;
 
                       return (
-                        <TableRow key={l.id}>
+                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "bg-slate-50" : ""}>
                           <TableCell className="text-sm font-semibold text-[hsl(var(--ink))]">
                             {l.code || ""}
                           </TableCell>
