@@ -1,10 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Budget } from "@/lib/supabaseTypes";
+import type { Budget, Project } from "@/lib/supabaseTypes";
 
-export type Totals = {
-  approved: number;
+export interface Totals {
+  planned: number;
   executed: number;
-};
+  remaining: number;
+}
+
+export async function fetchProjectById(projectId: string): Promise<Project | null> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .single();
+  if (error) return null;
+  return data as Project ?? null;
+}
 
 export type ProjectRollup = {
   id: string;
@@ -40,12 +51,12 @@ export async function fetchDashboardTotals(projectId: string, budgetId: string):
   if (lErr) throw lErr;
   if (tErr) throw tErr;
 
-  const approved = (lines ?? []).reduce(
+  const planned = (lines ?? []).reduce(
     (acc, r: any) => acc + (r.is_subtotal ? 0 : Number(r.total_approved ?? 0)),
     0
   );
   const executed = (tx ?? []).reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
-  return { approved, executed };
+  return { planned, executed, remaining: planned - executed };
 }
 
 export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {

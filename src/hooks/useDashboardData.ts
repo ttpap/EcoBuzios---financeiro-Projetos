@@ -1,11 +1,10 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/appStore";
-import { supabase } from "@/integrations/supabase/client";
-import type { Project } from "@/lib/supabaseTypes";
 import {
   fetchActiveBudget,
   fetchDashboardTotals,
+  fetchProjectById,
   fetchProjectsRemainingRollup,
   type ProjectRollup,
 } from "@/lib/dashboardApi";
@@ -85,11 +84,7 @@ export function useDashboardData(yearFilter: string) {
   const projectQuery = useQuery({
     queryKey: ["project", activeProjectId],
     enabled: Boolean(activeProjectId),
-    queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("id", activeProjectId).single();
-      if (error) throw error;
-      return data as Project;
-    },
+    queryFn: () => fetchProjectById(activeProjectId!),
   });
 
   const budgetQuery = useQuery({
@@ -105,11 +100,11 @@ export function useDashboardData(yearFilter: string) {
   });
 
   const stats = useMemo(() => {
-    const approved = totalsQuery.data?.approved ?? 0;
+    const planned = totalsQuery.data?.planned ?? 0;
     const executed = totalsQuery.data?.executed ?? 0;
-    const remaining = approved - executed;
-    const pct = approved > 0 ? (executed / approved) * 100 : 0;
-    return { approved, executed, remaining, pct };
+    const remaining = totalsQuery.data?.remaining ?? (planned - executed);
+    const pct = planned > 0 ? (executed / planned) * 100 : 0;
+    return { approved: planned, planned, executed, remaining, pct };
   }, [totalsQuery.data]);
 
   return {
@@ -122,5 +117,6 @@ export function useDashboardData(yearFilter: string) {
     projectData: projectQuery.data,
     isLoading: rollupQuery.isLoading,
     rollupData: rollupQuery.data ?? [],
+    activeProjectId,
   };
 }
