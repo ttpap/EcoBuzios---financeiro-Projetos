@@ -88,6 +88,7 @@ function applyFormatting(ws: WorkSheet, rows: Array<Record<string, any>>) {
     if (r === 0) return false;
     for (let c = range.s.c; c <= range.e.c; c++) {
       const addr = utils.encode_cell({ r, c });
+      // xlsx-js-style não exporta tipos para células e workbook internos; casts necessários
       const cell = (ws as any)[addr];
       const v = cell?.v;
       if (typeof v === "string" && v.trim().toUpperCase().startsWith("TOTAL")) return true;
@@ -119,6 +120,7 @@ function applyFormatting(ws: WorkSheet, rows: Array<Record<string, any>>) {
 }
 
 function addPrintTitles(wb: WorkBook, sheetIndex: number, sheetName: string) {
+  // xlsx-js-style não exporta o tipo WorkbookProperties; cast necessário para print titles
   wb.Workbook = wb.Workbook ?? ({} as any);
   const names = ((wb.Workbook as any).Names ?? []) as any[];
 

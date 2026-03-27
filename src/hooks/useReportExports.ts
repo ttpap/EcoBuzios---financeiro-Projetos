@@ -148,6 +148,7 @@ export function useReportExports({
     });
 
     const totalPago = lancamentosRows.reduce((acc, r) => acc + r.valor, 0);
+    // jsPDF-autotable adiciona lastAutoTable ao objeto doc em runtime; não há tipo oficial
     const endY = (doc as any).lastAutoTable?.finalY ?? 70;
     doc.setFontSize(10);
     doc.text(`Total Pago no Projeto: ${formatBRL(totalPago)}`, 40, endY + 18);

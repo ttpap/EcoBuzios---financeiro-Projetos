@@ -98,7 +98,7 @@ export default function PlanilhaProjeto() {
       const last = (existing?.[0] as Budget | undefined) ?? null;
       if (last) return last;
 
-      const months = Number((projectQuery.data as any)?.duration_months ?? 12);
+      const months = Number(projectQuery.data?.duration_months ?? 12);
 
       const { data, error } = await supabase
         .from("budgets")
@@ -257,7 +257,7 @@ export default function PlanilhaProjeto() {
       const prefixOld = `${payload.oldCode}.`;
       const prefixNew = `${payload.newCode}.`;
 
-      const updates = (lines ?? []).map((l: any) => {
+      const updates = (lines ?? []).map((l) => {
         const c = String(l.code ?? "");
         const next = c.startsWith(prefixOld) ? `${prefixNew}${c.slice(prefixOld.length)}` : c;
         return { id: String(l.id), code: next };
@@ -295,7 +295,7 @@ export default function PlanilhaProjeto() {
         .eq("category_id", categoryId);
       if (lErr) throw lErr;
 
-      const lineIds = (lines ?? []).map((l: any) => String(l.id));
+      const lineIds = (lines ?? []).map((l) => String(l.id));
       if (lineIds.length) {
         const { count, error: tErr } = await supabase
           .from("transactions")
@@ -334,7 +334,7 @@ export default function PlanilhaProjeto() {
         .filter((l) => l.category_id === categoryId)
         .map((l) => l.code);
 
-      const code = nextSubitemCode(Number((cat as any).code), existingCodes);
+      const code = nextSubitemCode(Number(cat.code), existingCodes);
 
       const sortOrder = (linesQuery.data?.length ?? 0) + 1;
       const { data, error } = await supabase
@@ -586,7 +586,7 @@ export default function PlanilhaProjeto() {
 
                     {lines.map((l) => {
                       const start = clampInt(Number(l.start_month ?? 1), 1, monthsCount);
-                      const end = clampInt(Number((l as any).end_month ?? start), 1, monthsCount);
+                      const end = clampInt(Number((l as BudgetLine).end_month ?? start), 1, monthsCount);
                       const invalid = end < start || end > monthsCount;
 
                       return (

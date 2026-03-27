@@ -101,8 +101,8 @@ export function useReportData() {
   const executedByLine = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of txQuery.data ?? []) {
-      const lid = String((t as any).budget_line_id);
-      m.set(lid, (m.get(lid) ?? 0) + Number((t as any).amount ?? 0));
+      const lid = String(t.budget_line_id);
+      m.set(lid, (m.get(lid) ?? 0) + Number(t.amount ?? 0));
     }
     return m;
   }, [txQuery.data]);
@@ -114,7 +114,7 @@ export function useReportData() {
   }, [linesQuery.data]);
 
   const executedTotal = useMemo(() => {
-    return (txQuery.data ?? []).reduce((acc, t) => acc + Number((t as any).amount ?? 0), 0);
+    return (txQuery.data ?? []).reduce((acc, t) => acc + Number(t.amount ?? 0), 0);
   }, [txQuery.data]);
 
   const rubricasRows = useMemo(() => {
@@ -146,7 +146,7 @@ export function useReportData() {
       // Linha do item (rubrica) já com totais.
       rows.push({
         kind: "item",
-        code: String((cat as any).code),
+        code: String(cat.code),
         name: cat.name,
         planned: plannedCat,
         executed: executedCat,
@@ -166,7 +166,7 @@ export function useReportData() {
       // Linha explícita de total por rubrica (como no exemplo)
       rows.push({
         kind: "total_item",
-        code: `Total Rubrica ${String((cat as any).code)}`,
+        code: `Total Rubrica ${String(cat.code)}`,
         name: "",
         planned: plannedCat,
         executed: executedCat,

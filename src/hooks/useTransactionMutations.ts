@@ -64,7 +64,7 @@ export function useTransactionMutations({
   });
 
   const monthTotal = useMemo(() => {
-    return (txQuery.data ?? []).reduce((acc, t) => acc + Number((t as any).amount ?? 0), 0);
+    return (txQuery.data ?? []).reduce((acc, t) => acc + Number(t.amount ?? 0), 0);
   }, [txQuery.data]);
 
   const attachmentsQuery = useQuery({
@@ -283,8 +283,8 @@ export function useTransactionMutations({
       const parsedAmount = parsePtBrMoneyToNumber(amount);
       if (!parsedAmount || parsedAmount <= 0) throw new Error("Informe um valor válido");
 
-      const oldMonthIndex = Number((editing as any).month_index ?? currentMonthIndex);
-      const oldLineId = String((editing as any).budget_line_id ?? "");
+      const oldMonthIndex = Number((editing as Transaction).month_index ?? currentMonthIndex);
+      const oldLineId = String((editing as Transaction).budget_line_id ?? "");
 
       const nextLineId = String(editingLineId || oldLineId || line?.id || "");
       if (!nextLineId) throw new Error("Selecione o item (rubrica)");
@@ -296,7 +296,7 @@ export function useTransactionMutations({
         .from("transactions")
         .update({
           budget_line_id: nextLineId,
-          description: nextLine?.name ?? (editing as any).description ?? null,
+          description: nextLine?.name ?? (editing as Transaction).description ?? null,
           vendor_id: vendor.id,
           payment_method: paymentMethod,
           document_number: documentNumber.trim() || null,
@@ -313,7 +313,7 @@ export function useTransactionMutations({
       if (error) throw error;
 
       const uploaded = await addAttachmentsToTx.mutateAsync({ txId: editing.id, projectId, files });
-      if (uploaded.length && !(editing as any).invoice_path) {
+      if (uploaded.length && !(editing as Transaction).invoice_path) {
         const first = uploaded[0];
         await supabase
           .from("transactions")
