@@ -29,10 +29,18 @@ const STATUS_COLORS: Record<string, string> = {
   finalizado: "bg-gray-100 text-gray-500",
 };
 
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "ativo", label: "Ativo" },
+  { value: "pausado", label: "Pausado" },
+  { value: "finalizado", label: "Finalizado" },
+];
+
 export default function Dashboard() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
   const [yearFilter, setYearFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const {
     yearRows,
@@ -43,7 +51,7 @@ export default function Dashboard() {
     stats,
     projectData,
     updateStatus,
-  } = useDashboardData(yearFilter);
+  } = useDashboardData(yearFilter, statusFilter);
 
   return (
     <div className="grid gap-6">
@@ -85,7 +93,7 @@ export default function Dashboard() {
       </div>
 
       <div className="rounded-3xl border bg-white p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-semibold tracking-tight text-[hsl(var(--ink))]">
               Total arrecadado por projeto
@@ -94,8 +102,21 @@ export default function Dashboard() {
               Orçamento aprovado (planejado), agrupado por Ano de Execução
             </div>
           </div>
-          <div className="text-xs text-[hsl(var(--muted-ink))]">
-            Toque em um projeto para selecionar
+          <div className="flex flex-wrap gap-1">
+            {STATUS_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setStatusFilter(opt.value)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold transition",
+                  statusFilter === opt.value
+                    ? "bg-[hsl(var(--brand))] text-white"
+                    : "bg-[hsl(var(--app-bg))] text-[hsl(var(--ink))] hover:bg-[hsl(var(--brand)/0.12)]"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
 
