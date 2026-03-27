@@ -1,245 +1,30 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useAppStore } from "@/lib/appStore";
-import { supabase } from "@/integrations/supabase/client";
-import type { Budget, Project } from "@/lib/supabaseTypes";
-import { Card } from "@/components/ui/card";
 import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
 import { BarChart3, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ProjectsShareDonut } from "@/components/dashboard/ProjectsShareDonut";
 import { YearTotalsBars } from "@/components/dashboard/YearTotalsBars";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type Totals = {
-  approved: number;
-  executed: number;
-};
-
-type ProjectRollup = {
-  id: string;
-  name: string;
-  executionYear: number | null;
-  planned: number;
-  executed: number;
-  remaining: number;
-};
-
-async function fetchActiveBudget(projectId: string) {
-  const { data: budgets, error } = await supabase
-    .from("budgets")
-    .select("*")
-    .eq("project_id", projectId)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  return (budgets?.[0] as Budget | undefined) ?? null;
-}
-
-async function fetchDashboardTotals(projectId: string, budgetId: string): Promise<Totals> {
-  const [{ data: lines, error: lErr }, { data: tx, error: tErr }] = await Promise.all([
-    supabase.from("budget_lines").select("total_approved,is_subtotal").eq("budget_id", budgetId),
-    supabase
-      .from("transactions")
-      .select("amount,deleted_at")
-      .eq("project_id", projectId)
-      .eq("budget_id", budgetId)
-      .is("deleted_at", null),
-  ]);
-
-  if (lErr) throw lErr;
-  if (tErr) throw tErr;
-
-  const approved = (lines ?? []).reduce(
-    (acc, r: any) => acc + (r.is_subtotal ? 0 : Number(r.total_approved ?? 0)),
-    0
-  );
-  const executed = (tx ?? []).reduce((acc, r) => acc + Number(r.amount ?? 0), 0);
-  return { approved, executed };
-}
-
-async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
-  const { data: projects, error: pErr } = await supabase
-    .from("projects")
-    .select("id,name,execution_year,created_at")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
-  if (pErr) throw pErr;
-
-  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null }>;
-  if (!list.length) return [];
-
-  const projectIds = list.map((p) => p.id);
-
-  const { data: budgets, error: bErr } = await supabase
-    .from("budgets")
-    .select("id,project_id,created_at")
-    .in("project_id", projectIds)
-    .order("created_at", { ascending: false });
-  if (bErr) throw bErr;
-
-  // Latest budget per project
-  const latestBudgetByProject = new Map<string, string>();
-  for (const b of (budgets ?? []) as any[]) {
-    const pid = String(b.project_id);
-    if (!latestBudgetByProject.has(pid)) latestBudgetByProject.set(pid, String(b.id));
-  }
-
-  const budgetIds = Array.from(latestBudgetByProject.values());
-
-  const [linesRes, txRes] = await Promise.all([
-    budgetIds.length
-      ? supabase
-          .from("budget_lines")
-          .select("budget_id,total_approved,is_subtotal")
-          .in("budget_id", budgetIds)
-      : Promise.resolve({ data: [], error: null } as any),
-    budgetIds.length
-      ? supabase
-          .from("transactions")
-          .select("project_id,budget_id,amount")
-          .in("budget_id", budgetIds)
-          .in("project_id", projectIds)
-          .is("deleted_at", null)
-      : Promise.resolve({ data: [], error: null } as any),
-  ]);
-
-  if (linesRes.error) throw linesRes.error;
-  if (txRes.error) throw txRes.error;
-
-  const plannedByBudget = new Map<string, number>();
-  for (const r of (linesRes.data ?? []) as any[]) {
-    if (r.is_subtotal) continue;
-    const bid = String(r.budget_id);
-    plannedByBudget.set(bid, (plannedByBudget.get(bid) ?? 0) + Number(r.total_approved ?? 0));
-  }
-
-  const executedByProject = new Map<string, number>();
-  for (const t of (txRes.data ?? []) as any[]) {
-    const pid = String(t.project_id);
-    executedByProject.set(pid, (executedByProject.get(pid) ?? 0) + Number(t.amount ?? 0));
-  }
-
-  return list.map((p) => {
-    const bid = latestBudgetByProject.get(p.id) ?? null;
-    const planned = bid ? plannedByBudget.get(bid) ?? 0 : 0;
-    const executed = executedByProject.get(p.id) ?? 0;
-    return {
-      id: p.id,
-      name: p.name,
-      executionYear: p.execution_year ?? null,
-      planned,
-      executed,
-      remaining: planned - executed,
-    };
-  });
-}
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 export default function Dashboard() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProjectId = useAppStore((s) => s.setActiveProjectId);
   const [yearFilter, setYearFilter] = useState<string>("all");
 
-  const rollupQuery = useQuery({
-    queryKey: ["projectsRemainingRollup"],
-    queryFn: fetchProjectsRemainingRollup,
-  });
-
-  const yearRows = useMemo(() => {
-    const groups = new Map<string, { value: number; count: number }>();
-    for (const p of rollupQuery.data ?? []) {
-      const y = p.executionYear ? String(p.executionYear) : "Sem ano";
-      const curr = groups.get(y) ?? { value: 0, count: 0 };
-      curr.value += p.remaining;
-      curr.count += 1;
-      groups.set(y, curr);
-    }
-
-    const keys = Array.from(groups.keys()).sort((a, b) => {
-      if (a === "Sem ano") return 1;
-      if (b === "Sem ano") return -1;
-      return Number(b) - Number(a);
-    });
-
-    return keys.map((k) => ({
-      yearLabel: k,
-      value: groups.get(k)!.value,
-      projectsCount: groups.get(k)!.count,
-    }));
-  }, [rollupQuery.data]);
-
-  const yearOptions = useMemo(() => {
-    const years = Array.from(new Set((rollupQuery.data ?? []).map((p) => p.executionYear).filter(Boolean) as number[]))
-      .sort((a, b) => b - a)
-      .map(String);
-    return years;
-  }, [rollupQuery.data]);
-
-  const projectsByYear = useMemo(() => {
-    const groups = new Map<string, ProjectRollup[]>();
-    for (const p of rollupQuery.data ?? []) {
-      const y = p.executionYear ? String(p.executionYear) : "Sem ano";
-      groups.set(y, [...(groups.get(y) ?? []), p]);
-    }
-
-    const years = Array.from(groups.keys()).sort((a, b) => {
-      if (a === "Sem ano") return 1;
-      if (b === "Sem ano") return -1;
-      return Number(b) - Number(a);
-    });
-
-    return years.map((y) => ({
-      yearLabel: y,
-      projects: (groups.get(y) ?? []).slice().sort((p1, p2) => p2.planned - p1.planned),
-    }));
-  }, [rollupQuery.data]);
-
-  const donutItems = useMemo(() => {
-    const list = rollupQuery.data ?? [];
-    const filtered =
-      yearFilter === "all"
-        ? list
-        : list.filter((p) => String(p.executionYear ?? "Sem ano") === yearFilter);
-
-    return filtered.map((p) => ({ id: p.id, name: p.name, value: Math.max(0, p.remaining) }));
-  }, [rollupQuery.data, yearFilter]);
-
-  const donutSubtitle = useMemo(() => {
-    if (yearFilter === "all") return "Saldo (Planejado − Executado) de cada projeto, considerando todos os anos";
-    return `Saldo (Planejado − Executado) por projeto no ano ${yearFilter}`;
-  }, [yearFilter]);
-
-  const projectQuery = useQuery({
-    queryKey: ["project", activeProjectId],
-    enabled: Boolean(activeProjectId),
-    queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("id", activeProjectId).single();
-      if (error) throw error;
-      return data as Project;
-    },
-  });
-
-  const budgetQuery = useQuery({
-    queryKey: ["activeBudget", activeProjectId],
-    enabled: Boolean(activeProjectId),
-    queryFn: () => fetchActiveBudget(activeProjectId!),
-  });
-
-  const totalsQuery = useQuery({
-    queryKey: ["dashboardTotals", activeProjectId, budgetQuery.data?.id],
-    enabled: Boolean(activeProjectId && budgetQuery.data?.id),
-    queryFn: () => fetchDashboardTotals(activeProjectId!, budgetQuery.data!.id),
-  });
-
-  const stats = useMemo(() => {
-    const approved = totalsQuery.data?.approved ?? 0;
-    const executed = totalsQuery.data?.executed ?? 0;
-    const remaining = approved - executed;
-    const pct = approved > 0 ? (executed / approved) * 100 : 0;
-    return { approved, executed, remaining, pct };
-  }, [totalsQuery.data]);
+  const {
+    yearRows,
+    yearOptions,
+    projectsByYear,
+    donutItems,
+    donutSubtitle,
+    stats,
+    projectData,
+  } = useDashboardData(yearFilter);
 
   return (
     <div className="grid gap-6">
@@ -401,7 +186,7 @@ export default function Dashboard() {
                   Visão geral
                 </div>
                 <h1 className="mt-3 text-2xl font-semibold tracking-tight text-[hsl(var(--ink))]">
-                  {projectQuery.data?.name ?? "Projeto"}
+                  {projectData?.name ?? "Projeto"}
                 </h1>
                 <p className="mt-1 text-sm text-[hsl(var(--muted-ink))]">
                   Acompanhe o total planejado, execução e saldo disponível.
