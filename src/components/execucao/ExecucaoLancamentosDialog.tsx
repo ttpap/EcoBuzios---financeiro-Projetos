@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import type { BudgetLine, Transaction } from "@/lib/supabaseTypes";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatPtBrDecimal, parsePtBrMoneyToNumber } from "@/lib/money";
-import { monthRefFromIndex, fetchVendorById } from "@/lib/fileUtils";
+import { monthRefFromIndex } from "@/lib/fileUtils";
 import { useTransactionForm } from "@/hooks/useTransactionForm";
 import { useTransactionMutations } from "@/hooks/useTransactionMutations";
 import { TransactionFormCard } from "@/components/execucao/TransactionFormCard";
@@ -41,6 +41,7 @@ export function ExecucaoLancamentosDialog({
     deleteTx,
     removeAttachment,
     signedUrl,
+    fetchVendorById,
   } = useTransactionMutations({
     open,
     budgetId,
@@ -77,19 +78,10 @@ export function ExecucaoLancamentosDialog({
 
   useEffect(() => {
     if (!open) {
+      form.resetForm();
       form.setCurrentMonthIndex(monthIndex);
-      form.setEditing(null);
-      form.setVendor(null);
-      form.setPaymentMethod("");
-      form.setDocumentNumber("");
-      form.setDueDate("");
-      form.setPaidDate("");
-      form.setAmount("");
-      form.setNotes("");
-      form.setFiles([]);
       form.setEditingMonthIndex(monthIndex);
       form.setEditingLineId(line?.id ?? "");
-      form.setActionTxId(null);
       return;
     }
     form.setCurrentMonthIndex(monthIndex);
@@ -108,7 +100,6 @@ export function ExecucaoLancamentosDialog({
       notes: form.notes,
       dueDate: form.dueDate,
       files: form.files,
-      parsePtBrMoneyToNumber,
     };
 
     if (!form.editing) {

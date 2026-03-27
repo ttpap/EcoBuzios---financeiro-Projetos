@@ -1,6 +1,4 @@
 import { PDFDocument } from "pdf-lib";
-import { supabase } from "@/integrations/supabase/client";
-import type { Vendor } from "@/lib/supabaseTypes";
 
 export type PaymentMethod = "transferencia" | "cheque" | "boleto" | "pix";
 
@@ -35,12 +33,6 @@ export function downloadBlobUrl(url: string, fileName: string) {
   document.body.appendChild(a);
   a.click();
   a.remove();
-}
-
-export async function fetchVendorById(vendorId: string): Promise<Vendor | null> {
-  const { data, error } = await supabase.from("vendors").select("*").eq("id", vendorId).single();
-  if (error) return null;
-  return (data as Vendor) ?? null;
 }
 
 export async function imageToLowResPdfBytes(file: File): Promise<Uint8Array> {

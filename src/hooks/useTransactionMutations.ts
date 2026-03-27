@@ -1,9 +1,16 @@
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { BudgetLine, Transaction, TransactionAttachment } from "@/lib/supabaseTypes";
+import type { BudgetLine, Transaction, TransactionAttachment, Vendor } from "@/lib/supabaseTypes";
 import { toast } from "sonner";
 import { safeFileName, fileToLowResPdf } from "@/lib/fileUtils";
+import { parsePtBrMoneyToNumber } from "@/lib/money";
+
+async function fetchVendorById(vendorId: string): Promise<Vendor | null> {
+  const { data, error } = await supabase.from("vendors").select("*").eq("id", vendorId).single();
+  if (error) return null;
+  return (data as Vendor) ?? null;
+}
 
 export function useTransactionMutations({
   open,
@@ -171,7 +178,6 @@ export function useTransactionMutations({
       notes,
       dueDate,
       files,
-      parsePtBrMoneyToNumber,
     }: {
       vendor: { id: string } | null;
       paymentMethod: string;
@@ -182,7 +188,6 @@ export function useTransactionMutations({
       notes: string;
       dueDate: string;
       files: File[];
-      parsePtBrMoneyToNumber: (v: string) => number;
     }) => {
       if (!line?.id) throw new Error("Linha inválida");
       if (!vendor?.id) throw new Error("Selecione um fornecedor");
@@ -257,7 +262,6 @@ export function useTransactionMutations({
       notes,
       dueDate,
       files,
-      parsePtBrMoneyToNumber,
     }: {
       editing: Transaction | null;
       vendor: { id: string } | null;
@@ -270,7 +274,6 @@ export function useTransactionMutations({
       notes: string;
       dueDate: string;
       files: File[];
-      parsePtBrMoneyToNumber: (v: string) => number;
     }) => {
       if (!editing?.id) throw new Error("Selecione um lançamento para editar");
       if (!vendor?.id) throw new Error("Selecione um fornecedor");
@@ -377,5 +380,6 @@ export function useTransactionMutations({
     addAttachmentsToTx,
     removeAttachment,
     signedUrl,
+    fetchVendorById,
   };
 }
