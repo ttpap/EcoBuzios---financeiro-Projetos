@@ -283,8 +283,8 @@ export function useReportExports({
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch (e: any) {
-      alert(e?.message ?? "Falha ao gerar PDF");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Falha ao gerar PDF");
     }
   };
 

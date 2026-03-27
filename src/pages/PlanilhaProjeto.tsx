@@ -115,7 +115,7 @@ export default function PlanilhaProjeto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budget", activeProjectId] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao criar"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao criar"),
   });
 
   const budgetQuery = useQuery({
@@ -228,7 +228,7 @@ export default function PlanilhaProjeto() {
       queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
       toast.success("Item criado");
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao criar item"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao criar item"),
   });
 
   const updateCategory = useMutation({
@@ -240,7 +240,7 @@ export default function PlanilhaProjeto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["planilhaCats", budgetQuery.data?.id] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao salvar item"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar item"),
   });
 
   const updateCategoryCode = useMutation({
@@ -281,7 +281,7 @@ export default function PlanilhaProjeto() {
       queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
       toast.success("Código do item atualizado");
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar código"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao atualizar código"),
   });
 
   const deleteCategory = useMutation({
@@ -320,7 +320,7 @@ export default function PlanilhaProjeto() {
       queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
       toast.success("Item excluído");
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao excluir item"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao excluir item"),
   });
 
   const addSubitem = useMutation({
@@ -358,7 +358,7 @@ export default function PlanilhaProjeto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao adicionar subitem"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao adicionar subitem"),
   });
 
   const updateLine = useMutation({
@@ -373,7 +373,7 @@ export default function PlanilhaProjeto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar"),
   });
 
   const deleteLine = useMutation({
@@ -385,7 +385,7 @@ export default function PlanilhaProjeto() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["planilhaLines", budgetQuery.data?.id] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao excluir"),
   });
 
   const itemTotals = useMemo(() => {

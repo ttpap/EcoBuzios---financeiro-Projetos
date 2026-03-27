@@ -155,7 +155,7 @@ export function useTransactionMutations({
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao remover anexo"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao remover anexo"),
   });
 
   const signedUrl = useMutation({
@@ -164,7 +164,7 @@ export function useTransactionMutations({
       if (error) throw error;
       return data.signedUrl;
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao gerar link"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao gerar link"),
   });
 
   const createTx = useMutation({
@@ -246,7 +246,7 @@ export function useTransactionMutations({
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId, line?.id] });
       queryClient.invalidateQueries({ queryKey: ["txAttachments"] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar"),
   });
 
   const updateTx = useMutation({
@@ -347,7 +347,7 @@ export function useTransactionMutations({
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["txAttachments"] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao atualizar"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao atualizar"),
   });
 
   const deleteTx = useMutation({
@@ -364,7 +364,7 @@ export function useTransactionMutations({
       queryClient.invalidateQueries({ queryKey: ["execTx", projectId, budgetId] });
       queryClient.invalidateQueries({ queryKey: ["execTxMonth", projectId, budgetId] });
     },
-    onError: (e: any) => toast.error(e.message ?? "Falha ao excluir"),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao excluir"),
   });
 
   return {
