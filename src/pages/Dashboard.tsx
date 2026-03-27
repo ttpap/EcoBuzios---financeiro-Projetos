@@ -118,11 +118,14 @@ export default function Dashboard() {
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {g.projects.map((p) => (
-                  <button
+                  <div
                     key={p.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setActiveProjectId(p.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setActiveProjectId(p.id); }}
                     className={cn(
-                      "text-left",
+                      "cursor-pointer text-left",
                       "rounded-3xl border bg-white p-4 shadow-sm transition hover:shadow-md",
                       activeProjectId === p.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : "",
                       p.status === "pausado" || p.status === "finalizado" ? "opacity-60" : ""
@@ -195,7 +198,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </div>
                 ))}
 
                 {!g.projects.length ? (
