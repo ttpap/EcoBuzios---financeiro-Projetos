@@ -318,7 +318,7 @@ export default function ExecucaoProjeto() {
                       const saldoLine = totals.planned - totals.executed;
 
                       return (
-                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "bg-slate-50" : ""}>
+                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "!bg-blue-100" : ""}>
                           <TableCell className="font-medium text-[hsl(var(--ink))]">{l.code}</TableCell>
                           <TableCell className="text-[hsl(var(--ink))]">{l.name}</TableCell>
 

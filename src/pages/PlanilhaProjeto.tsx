@@ -565,7 +565,7 @@ export default function PlanilhaProjeto() {
                       const invalid = end < start || end > monthsCount;
 
                       return (
-                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "bg-slate-50" : ""}>
+                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "!bg-blue-100" : ""}>
                           <TableCell className="text-sm font-semibold text-[hsl(var(--ink))]">
                             {l.code || ""}
                           </TableCell>
