@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { formatBRL, formatPtBrDecimal, parsePtBrMoneyToNumber } from "@/lib/money";
+import { calcMonthAmount, nextSubitemCode } from "@/lib/budgetUtils";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { BalanceteTabs } from "@/components/balancete/BalanceteTabs";
@@ -37,32 +38,6 @@ function buildMonthLabels(monthsCount: number) {
   }));
 }
 
-function monthlyValue(total: number, months: number) {
-  const d = Math.max(1, months);
-  return total / d;
-}
-
-function calcMonthAmount(line: BudgetLine, monthIndex1: number) {
-  const start = Number(line.start_month ?? 1);
-  const end = Number((line as any).end_month ?? start);
-  if (monthIndex1 < start || monthIndex1 > end) return 0;
-  const total = Number(line.total_approved ?? 0);
-  const months = end - start + 1;
-  return monthlyValue(total, months);
-}
-
-function nextSubitemCode(itemCode: number, existingCodes: Array<string | null | undefined>) {
-  const prefix = `${itemCode}.`;
-  let max = 0;
-  for (const c of existingCodes) {
-    const s = String(c ?? "").trim();
-    if (!s.startsWith(prefix)) continue;
-    const tail = s.slice(prefix.length);
-    const n = Number(tail.split(".")[0]);
-    if (Number.isFinite(n)) max = Math.max(max, Math.trunc(n));
-  }
-  return `${itemCode}.${max + 1}`;
-}
 
 export default function PlanilhaProjeto() {
   const navigate = useNavigate();
