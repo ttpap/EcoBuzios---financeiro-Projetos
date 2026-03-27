@@ -272,19 +272,19 @@ export default function ExecucaoProjeto() {
 
       <Card className="rounded-3xl border bg-white p-0 shadow-sm">
         <div className="overflow-auto">
-          <Table>
+          <Table className="[&_td]:border-r [&_td]:border-gray-100 [&_th]:border-r [&_th]:border-gray-100">
             <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[110px]">Código</TableHead>
-                <TableHead className="min-w-[320px]">Descrição</TableHead>
+              <TableRow className="bg-gray-50">
+                <TableHead className="min-w-[110px] font-bold text-[hsl(var(--ink))]">Código</TableHead>
+                <TableHead className="min-w-[320px] font-bold text-[hsl(var(--ink))]">Descrição</TableHead>
                 {monthCols.map((m) => (
-                  <TableHead key={m.idx} className="min-w-[120px] text-right">
+                  <TableHead key={m.idx} className="min-w-[120px] text-right font-bold text-[hsl(var(--ink))]">
                     {m.label}
                   </TableHead>
                 ))}
-                <TableHead className="min-w-[140px] text-right">Planejado</TableHead>
-                <TableHead className="min-w-[140px] text-right">Executado</TableHead>
-                <TableHead className="min-w-[140px] text-right">Saldo</TableHead>
+                <TableHead className="min-w-[140px] text-right font-bold text-[hsl(var(--ink))]">Planejado</TableHead>
+                <TableHead className="min-w-[140px] text-right font-bold text-[hsl(var(--ink))]">Executado</TableHead>
+                <TableHead className="min-w-[140px] text-right font-bold text-[hsl(var(--ink))]">Saldo</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -294,7 +294,7 @@ export default function ExecucaoProjeto() {
 
                 return (
                   <>
-                    <TableRow key={cat.id} className="bg-black/[0.03]">
+                    <TableRow key={cat.id} className="border-l-4 border-l-[hsl(var(--brand))] bg-[hsl(var(--brand)/0.08)]">
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.code}</TableCell>
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">{cat.name}</TableCell>
                       {monthCols.map((m) => (
@@ -318,7 +318,7 @@ export default function ExecucaoProjeto() {
                       const saldoLine = totals.planned - totals.executed;
 
                       return (
-                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "!bg-blue-100" : ""}>
+                        <TableRow key={l.id} className={cn(lineIdx % 2 === 1 ? "!bg-blue-50" : "bg-white", "hover:!bg-blue-100 transition-colors")}>
                           <TableCell className="font-medium text-[hsl(var(--ink))]">{l.code}</TableCell>
                           <TableCell className="text-[hsl(var(--ink))]">{l.name}</TableCell>
 

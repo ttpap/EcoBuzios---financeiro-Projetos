@@ -463,20 +463,20 @@ export default function PlanilhaProjeto() {
 
       <Card className="rounded-3xl border bg-white p-0 shadow-sm">
         <div className="overflow-auto">
-          <Table>
+          <Table className="[&_td]:border-r [&_td]:border-gray-100 [&_th]:border-r [&_th]:border-gray-100">
             <TableHeader>
-              <TableRow>
-                <TableHead className="min-w-[110px]">Código</TableHead>
-                <TableHead className="min-w-[320px]">Descrição</TableHead>
-                <TableHead className="min-w-[160px] text-right">Valor total</TableHead>
-                <TableHead className="min-w-[140px] text-right">Mês inicial</TableHead>
-                <TableHead className="min-w-[140px] text-right">Mês final</TableHead>
+              <TableRow className="bg-gray-50">
+                <TableHead className="min-w-[110px] font-bold text-[hsl(var(--ink))]">Código</TableHead>
+                <TableHead className="min-w-[320px] font-bold text-[hsl(var(--ink))]">Descrição</TableHead>
+                <TableHead className="min-w-[160px] text-right font-bold text-[hsl(var(--ink))]">Valor total</TableHead>
+                <TableHead className="min-w-[140px] text-right font-bold text-[hsl(var(--ink))]">Mês inicial</TableHead>
+                <TableHead className="min-w-[140px] text-right font-bold text-[hsl(var(--ink))]">Mês final</TableHead>
                 {monthCols.map((m) => (
-                  <TableHead key={m.idx} className="min-w-[120px] text-right">
+                  <TableHead key={m.idx} className="min-w-[120px] text-right font-bold text-[hsl(var(--ink))]">
                     {m.label}
                   </TableHead>
                 ))}
-                <TableHead className="min-w-[90px] text-right">Ações</TableHead>
+                <TableHead className="min-w-[90px] text-right font-bold text-[hsl(var(--ink))]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -486,7 +486,7 @@ export default function PlanilhaProjeto() {
 
                 return (
                   <>
-                    <TableRow key={cat.id} className="bg-black/[0.03]">
+                    <TableRow key={cat.id} className="border-l-4 border-l-[hsl(var(--brand))] bg-[hsl(var(--brand)/0.08)]">
                       <TableCell className="font-semibold text-[hsl(var(--ink))]">
                         <Input
                           defaultValue={String(cat.code ?? "")}
@@ -565,7 +565,7 @@ export default function PlanilhaProjeto() {
                       const invalid = end < start || end > monthsCount;
 
                       return (
-                        <TableRow key={l.id} className={lineIdx % 2 === 1 ? "!bg-blue-100" : ""}>
+                        <TableRow key={l.id} className={cn(lineIdx % 2 === 1 ? "!bg-blue-50" : "bg-white", "hover:!bg-blue-100 transition-colors")}>
                           <TableCell className="text-sm font-semibold text-[hsl(var(--ink))]">
                             {l.code || ""}
                           </TableCell>
