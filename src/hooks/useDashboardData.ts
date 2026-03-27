@@ -1,16 +1,26 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/appStore";
 import {
   fetchActiveBudget,
   fetchDashboardTotals,
   fetchProjectById,
   fetchProjectsRemainingRollup,
+  updateProjectStatus,
   type ProjectRollup,
 } from "@/lib/dashboardApi";
+import { toast } from "sonner";
 
 export function useDashboardData(yearFilter: string) {
+  const queryClient = useQueryClient();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+
+  const updateStatus = useMutation({
+    mutationFn: ({ projectId, status }: { projectId: string; status: string }) =>
+      updateProjectStatus(projectId, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projectsRemainingRollup"] }),
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar status"),
+  });
 
   const rollupQuery = useQuery({
     queryKey: ["projectsRemainingRollup"],
@@ -118,5 +128,6 @@ export function useDashboardData(yearFilter: string) {
     isLoading: rollupQuery.isLoading,
     rollupData: rollupQuery.data ?? [],
     activeProjectId,
+    updateStatus,
   };
 }
