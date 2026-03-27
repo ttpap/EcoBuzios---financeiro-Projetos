@@ -3,13 +3,31 @@ import { useAppStore } from "@/lib/appStore";
 import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { BarChart3, TrendingUp } from "lucide-react";
+import { BarChart3, ChevronDown, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ProjectsShareDonut } from "@/components/dashboard/ProjectsShareDonut";
 import { YearTotalsBars } from "@/components/dashboard/YearTotalsBars";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const STATUS_LABELS: Record<string, string> = {
+  ativo: "Ativo",
+  pausado: "Pausado",
+  finalizado: "Finalizado",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  ativo: "bg-green-100 text-green-700",
+  pausado: "bg-amber-100 text-amber-700",
+  finalizado: "bg-gray-100 text-gray-500",
+};
 
 export default function Dashboard() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
@@ -24,6 +42,7 @@ export default function Dashboard() {
     donutSubtitle,
     stats,
     projectData,
+    updateStatus,
   } = useDashboardData(yearFilter);
 
   return (
@@ -105,7 +124,8 @@ export default function Dashboard() {
                     className={cn(
                       "text-left",
                       "rounded-3xl border bg-white p-4 shadow-sm transition hover:shadow-md",
-                      activeProjectId === p.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : ""
+                      activeProjectId === p.id ? "ring-2 ring-[hsl(var(--brand)/0.35)]" : "",
+                      p.status === "pausado" || p.status === "finalizado" ? "opacity-60" : ""
                     )}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -117,15 +137,44 @@ export default function Dashboard() {
                           Planejado: <span className="font-semibold text-[hsl(var(--ink))]">{formatBRL(p.planned)}</span>
                         </div>
                       </div>
-                      <div
-                        className={cn(
-                          "flex-none rounded-full px-2 py-1 text-xs font-semibold",
-                          activeProjectId === p.id
-                            ? "bg-[hsl(var(--brand))] text-white"
-                            : "bg-[hsl(var(--app-bg))] text-[hsl(var(--ink))]"
-                        )}
-                      >
-                        {activeProjectId === p.id ? "Ativo" : "Selecionar"}
+                      <div className="flex flex-none items-center gap-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              className={cn(
+                                "flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold",
+                                STATUS_COLORS[p.status ?? "ativo"]
+                              )}
+                            >
+                              {STATUS_LABELS[p.status ?? "ativo"]}
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {(["ativo", "pausado", "finalizado"] as const).map((s) => (
+                              <DropdownMenuItem
+                                key={s}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateStatus.mutate({ projectId: p.id, status: s });
+                                }}
+                              >
+                                {STATUS_LABELS[s]}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <div
+                          className={cn(
+                            "flex-none rounded-full px-2 py-1 text-xs font-semibold",
+                            activeProjectId === p.id
+                              ? "bg-[hsl(var(--brand))] text-white"
+                              : "bg-[hsl(var(--app-bg))] text-[hsl(var(--ink))]"
+                          )}
+                        >
+                          {activeProjectId === p.id ? "Ativo" : "Selecionar"}
+                        </div>
                       </div>
                     </div>
 
