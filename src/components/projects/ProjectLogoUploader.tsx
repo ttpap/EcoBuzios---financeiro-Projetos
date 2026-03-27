@@ -6,7 +6,7 @@ import { safeFileName } from "@/lib/projectLogos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ImageUp, Trash2 } from "lucide-react";
+import { ImageUp, ImageIcon, Trash2 } from "lucide-react";
 
 export function ProjectLogoUploader({ project }: { project: Project }) {
   const queryClient = useQueryClient();
@@ -31,7 +31,6 @@ export function ProjectLogoUploader({ project }: { project: Project }) {
         .upload(path, file, { contentType: file.type, upsert: false });
       if (upErr) throw upErr;
 
-      // remove old logo if exists
       if (project.logo_path) {
         await supabase.storage.from("project-logos").remove([project.logo_path]);
       }
@@ -76,10 +75,26 @@ export function ProjectLogoUploader({ project }: { project: Project }) {
     onError: (e: any) => toast.error(e.message ?? "Falha ao remover"),
   });
 
+  const logoUrl = useMemo(() => {
+    if (!project.logo_path) return null;
+    const { data } = supabase.storage.from("project-logos").getPublicUrl(project.logo_path);
+    return data.publicUrl;
+  }, [project.logo_path]);
+
   return (
-    <div className="grid gap-2">
-      <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Logo do projeto (opcional)</div>
-      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+    <div className="flex items-start gap-4">
+      {/* Moldura da logo */}
+      <div className="flex h-32 w-32 flex-none items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-black/10 bg-[hsl(var(--app-bg))] transition hover:border-[hsl(var(--brand)/0.4)]">
+        {logoUrl ? (
+          <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1.5" />
+        ) : (
+          <ImageIcon className="h-8 w-8 text-black/15" />
+        )}
+      </div>
+
+      {/* Controles */}
+      <div className="min-w-0 grid gap-2">
+        <div className="text-xs font-medium text-[hsl(var(--muted-ink))]">Logo do projeto (opcional)</div>
         <Input
           type="file"
           accept="image/png,image/jpeg,image/webp"
