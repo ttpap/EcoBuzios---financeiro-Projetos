@@ -7,7 +7,6 @@ import { normalizePayMethod, formatDateBR } from "@/lib/reportBuilders";
 
 export function useReportData() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
-  const activeBudgetId = useAppStore((s) => s.activeBudgetId);
 
   const projectQuery = useQuery({
     queryKey: ["project", activeProjectId],
