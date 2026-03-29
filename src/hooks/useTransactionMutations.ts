@@ -370,7 +370,7 @@ export function useTransactionMutations({
   return {
     linesForSelect: linesForSelectQuery.data ?? [],
     transactions: txQuery.data ?? [],
-    attachments: attachmentsQuery.data ?? [],
+    attachments: attachmentsQuery.data,
     monthTotal,
     isLoading: txQuery.isLoading,
     txQueryData: txQuery.data,
