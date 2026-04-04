@@ -17,7 +17,7 @@ export default function ArchivedProjects() {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .eq("deleted_at", "ARCHIVED")
+        .eq("deleted_at", "1970-01-01T00:00:00.000Z")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Project[];

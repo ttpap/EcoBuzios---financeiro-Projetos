@@ -138,7 +138,7 @@ export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
   });
 }
 
-export const ARCHIVED_MARKER = "ARCHIVED";
+export const ARCHIVED_MARKER = "1970-01-01T00:00:00.000Z";
 
 export async function archiveProject(projectId: string): Promise<void> {
   const { error } = await supabase

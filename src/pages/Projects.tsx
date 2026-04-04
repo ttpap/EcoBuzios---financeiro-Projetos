@@ -158,7 +158,7 @@ export default function Projects() {
     mutationFn: async (projectId: string) => {
       const { error } = await supabase
         .from("projects")
-        .update({ deleted_at: "ARCHIVED" } as any)
+        .update({ deleted_at: "1970-01-01T00:00:00.000Z" } as any)
         .eq("id", projectId);
       if (error) throw error;
       return projectId;
