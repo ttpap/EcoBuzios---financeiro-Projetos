@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { FolderKanban, Pencil, Plus, Trash2, Table2 } from "lucide-react";
+import { Archive, FolderKanban, Pencil, Plus, Trash2, Table2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { ProjectLogoUploader } from "@/components/projects/ProjectLogoUploader";
 
@@ -84,6 +84,7 @@ export default function Projects() {
         .from("projects")
         .select("*")
         .is("deleted_at", null)
+        .neq("status", "arquivado")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Project[];
@@ -152,6 +153,24 @@ export default function Projects() {
       if (activeProjectId === project.id) setActiveProjectId(project.id);
     },
     onError: (e: any) => toast.error(e.message ?? "Falha ao salvar"),
+  });
+
+  const archiveProject = useMutation({
+    mutationFn: async (projectId: string) => {
+      const { error } = await supabase
+        .from("projects")
+        .update({ status: "arquivado" } as any)
+        .eq("id", projectId);
+      if (error) throw error;
+      return projectId;
+    },
+    onSuccess: (projectId) => {
+      toast.success("Projeto arquivado");
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projectsRemainingRollup"] });
+      if (activeProjectId === projectId) setActiveProjectId(null);
+    },
+    onError: (e: any) => toast.error(e.message ?? "Falha ao arquivar"),
   });
 
   const deleteProject = useMutation({
@@ -382,6 +401,15 @@ export default function Projects() {
                       >
                         <Pencil className="mr-2 h-4 w-4" />
                         Editar
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="rounded-full"
+                        onClick={() => archiveProject.mutate(p.id)}
+                      >
+                        <Archive className="mr-2 h-4 w-4" />
+                        Arquivar
                       </Button>
 
                       <AlertDialog>

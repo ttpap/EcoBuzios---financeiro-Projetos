@@ -18,6 +18,7 @@ import BalanceteLinha from "@/pages/BalanceteLinha";
 import Lancamentos from "@/pages/Lancamentos";
 import Relatorios from "@/pages/Relatorios";
 import Settings from "@/pages/Settings";
+import ArchivedProjects from "@/pages/ArchivedProjects";
 import BalanceteLancamentos from "@/pages/BalanceteLancamentos";
 import BalanceteRelatorios from "@/pages/BalanceteRelatorios";
 import BalanceteAlertas from "@/pages/BalanceteAlertas";
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/dashboard" element={<AuthedLayout><Dashboard /></AuthedLayout>} />
             <Route path="/projects" element={<AuthedLayout><Projects /></AuthedLayout>} />
             <Route path="/fornecedores" element={<AuthedLayout><Fornecedores /></AuthedLayout>} />
+            <Route path="/archived" element={<AuthedLayout><ArchivedProjects /></AuthedLayout>} />
 
             {/* Módulo Balancete */}
             <Route path="/balancete" element={<AuthedLayout><PlanilhaProjeto /></AuthedLayout>} />

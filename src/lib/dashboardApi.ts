@@ -24,7 +24,7 @@ export type ProjectRollup = {
   planned: number;
   executed: number;
   remaining: number;
-  status: string; // "ativo" | "pausado" | "finalizado"
+  status: string; // "ativo" | "pausado" | "finalizado" | "arquivado"
 };
 
 export async function fetchActiveBudget(projectId: string) {
@@ -68,7 +68,8 @@ export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
     .order("created_at", { ascending: false });
   if (pErr) throw pErr;
 
-  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null; status: string | null }>;
+  const list = ((projects ?? []) as Array<{ id: string; name: string; execution_year: number | null; status: string | null }>)
+    .filter((p) => p.status !== "arquivado");
   if (!list.length) return [];
 
   const projectIds = list.map((p) => p.id);
