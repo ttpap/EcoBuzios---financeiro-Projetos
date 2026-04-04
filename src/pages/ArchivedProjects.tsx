@@ -17,8 +17,7 @@ export default function ArchivedProjects() {
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .is("deleted_at", null)
-        .eq("status", "arquivado")
+        .eq("deleted_at", "ARCHIVED")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as Project[];
@@ -29,7 +28,7 @@ export default function ArchivedProjects() {
     mutationFn: async (projectId: string) => {
       const { error } = await supabase
         .from("projects")
-        .update({ status: "ativo" } as any)
+        .update({ deleted_at: null } as any)
         .eq("id", projectId);
       if (error) throw error;
       return projectId;

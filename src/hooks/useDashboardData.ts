@@ -7,6 +7,7 @@ import {
   fetchProjectById,
   fetchProjectsRemainingRollup,
   updateProjectStatus,
+  archiveProject as archiveProjectApi,
   type ProjectRollup,
 } from "@/lib/dashboardApi";
 import { toast } from "sonner";
@@ -23,6 +24,16 @@ export function useDashboardData(yearFilter: string, statusFilter: string) {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar status"),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (projectId: string) => archiveProjectApi(projectId),
+    onSuccess: () => {
+      toast.success("Projeto arquivado");
+      queryClient.invalidateQueries({ queryKey: ["projectsRemainingRollup"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao arquivar"),
   });
 
   const rollupQuery = useQuery({
@@ -137,5 +148,6 @@ export function useDashboardData(yearFilter: string, statusFilter: string) {
     rollupData: rollupQuery.data ?? [],
     activeProjectId,
     updateStatus,
+    archiveProject: (id: string) => archiveMutation.mutate(id),
   };
 }

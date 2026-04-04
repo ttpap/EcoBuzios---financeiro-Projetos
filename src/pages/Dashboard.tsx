@@ -51,6 +51,7 @@ export default function Dashboard() {
     stats,
     projectData,
     updateStatus,
+    archiveProject,
   } = useDashboardData(yearFilter, statusFilter);
 
   return (
@@ -192,7 +193,7 @@ export default function Dashboard() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            updateStatus.mutate({ projectId: p.id, status: "arquivado" });
+                            archiveProject(p.id);
                           }}
                           title="Arquivar projeto"
                           className="flex-none rounded-full p-1 text-[hsl(var(--muted-ink))] hover:bg-amber-100 hover:text-amber-700 transition"

@@ -24,7 +24,7 @@ export type ProjectRollup = {
   planned: number;
   executed: number;
   remaining: number;
-  status: string; // "ativo" | "pausado" | "finalizado" | "arquivado"
+  status: string; // "ativo" | "pausado" | "finalizado"
 };
 
 export async function fetchActiveBudget(projectId: string) {
@@ -68,8 +68,7 @@ export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
     .order("created_at", { ascending: false });
   if (pErr) throw pErr;
 
-  const list = ((projects ?? []) as Array<{ id: string; name: string; execution_year: number | null; status: string | null }>)
-    .filter((p) => p.status !== "arquivado");
+  const list = (projects ?? []) as Array<{ id: string; name: string; execution_year: number | null; status: string | null }>;
   if (!list.length) return [];
 
   const projectIds = list.map((p) => p.id);
@@ -137,6 +136,25 @@ export async function fetchProjectsRemainingRollup(): Promise<ProjectRollup[]> {
       status: p.status ?? "ativo",
     };
   });
+}
+
+export const ARCHIVED_MARKER = "ARCHIVED";
+
+export async function archiveProject(projectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ deleted_at: ARCHIVED_MARKER } as any)
+    .eq("id", projectId);
+  if (error) throw error;
+}
+
+export async function restoreProject(projectId: string): Promise<void> {
+  const { error } = await supabase
+    .from("projects")
+    .update({ deleted_at: null } as any)
+    .eq("id", projectId)
+    .eq("deleted_at", ARCHIVED_MARKER);
+  if (error) throw error;
 }
 
 export async function updateProjectStatus(projectId: string, status: string): Promise<void> {
