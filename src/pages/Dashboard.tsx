@@ -3,7 +3,7 @@ import { useAppStore } from "@/lib/appStore";
 import { formatBRL } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { BarChart3, ChevronDown, TrendingUp } from "lucide-react";
+import { Archive, BarChart3, ChevronDown, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { ProjectsShareDonut } from "@/components/dashboard/ProjectsShareDonut";
@@ -189,6 +189,16 @@ export default function Dashboard() {
                             ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateStatus.mutate({ projectId: p.id, status: "arquivado" });
+                          }}
+                          title="Arquivar projeto"
+                          className="flex-none rounded-full p-1 text-[hsl(var(--muted-ink))] hover:bg-amber-100 hover:text-amber-700 transition"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                        </button>
                         <div
                           className={cn(
                             "flex-none rounded-full px-2 py-1 text-xs font-semibold",

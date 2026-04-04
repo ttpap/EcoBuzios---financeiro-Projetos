@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  Archive,
   BarChart3,
   Building2,
   FolderKanban,
@@ -20,6 +21,7 @@ const nav = [
   { to: "/balancete", label: "Balancete PRO", icon: Table2 },
   { to: "/balancete/execucao", label: "Execução", icon: ReceiptText },
   { to: "/fornecedores", label: "Fornecedores", icon: Building2 },
+  { to: "/archived", label: "Arquivados", icon: Archive },
   { to: "/settings", label: "Configurações", icon: Settings },
 ];
 

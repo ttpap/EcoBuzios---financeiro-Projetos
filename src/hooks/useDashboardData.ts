@@ -18,7 +18,10 @@ export function useDashboardData(yearFilter: string, statusFilter: string) {
   const updateStatus = useMutation({
     mutationFn: ({ projectId, status }: { projectId: string; status: string }) =>
       updateProjectStatus(projectId, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projectsRemainingRollup"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projectsRemainingRollup"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Falha ao salvar status"),
   });
 
